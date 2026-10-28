@@ -1,0 +1,227 @@
+<title>Meja Uji Mesin Bebek</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Mesin motor satu silinder 4-tak 109 cc yang berjalan di browser: dibangun prosedural dengan three.js, dengan simulasi tekanan silinder, dinamo rem, dan suara yang disintesis.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Barlow:wght@400;500;600&family=Martian+Mono:wght@400;500&display=swap">
+<style>
+/* Tata letak: lembar uji bengkel. Panggung 3D besar di kiri, panel operator di kanan; di HP bertumpuk. */
+:root {
+  --bg: #e6ebe5;
+  --panel: #f3f6f1;
+  --ink: #17251e;
+  --muted: #56675e;
+  --line: #c3cdc5;
+  --accent: #d99a06;
+  --accent-ink: #7d5600;
+  --hot: #cc3f17;
+  --intake: #2f6fd6;
+  --exhaust: #7b6e62;
+  --stage: #d7dfd8;
+  --display: "Big Shoulders Display", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+  --mono: "Martian Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101814; --panel: #17211c; --ink: #e2eae4; --muted: #92a399; --line: #2b3a32;
+    --accent: #f0b522; --accent-ink: #f0b522; --hot: #ff6b3f; --intake: #6ea2ff; --exhaust: #b3a596; --stage: #1b2721;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101814; --panel: #17211c; --ink: #e2eae4; --muted: #92a399; --line: #2b3a32;
+  --accent: #f0b522; --accent-ink: #f0b522; --hot: #ff6b3f; --intake: #6ea2ff; --exhaust: #b3a596; --stage: #1b2721;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 18px 40px;
+}
+.wrap { max-width: 1320px; margin: 0 auto; display: grid; gap: 18px; }
+header.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 24px; }
+.eyebrow { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
+h1 { font-family: var(--display); font-weight: 800; font-size: clamp(34px, 6vw, 64px); line-height: 0.92; margin: 0; letter-spacing: 0.005em; text-transform: uppercase; text-wrap: balance; }
+h1 em { font-style: normal; color: var(--accent-ink); }
+.lede { margin: 0; max-width: 46ch; color: var(--muted); font-size: 14.5px; }
+
+.bench { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; align-items: start; }
+.viewport { position: relative; border: 1px solid var(--line); background: var(--stage); border-radius: 4px; overflow: hidden; min-width: 0; height: min(78vh, 760px); min-height: 460px; }
+#stage { position: absolute; inset: 0; touch-action: none; }
+#stage canvas { display: block; width: 100%; height: 100%; }
+.hud { position: absolute; left: 12px; top: 12px; right: 12px; display: flex; justify-content: space-between; align-items: start; gap: 8px; pointer-events: none; }
+.stroke-tag { pointer-events: none; font-family: var(--display); font-weight: 800; font-size: 26px; text-transform: uppercase; letter-spacing: 0.02em; line-height: 1; padding: 6px 10px 5px; background: var(--panel); border: 1px solid var(--line); border-left: 5px solid var(--accent); }
+.stroke-tag[data-stroke="usaha"] { border-left-color: var(--hot); }
+.stroke-tag[data-stroke="hisap"] { border-left-color: var(--intake); }
+.stroke-tag[data-stroke="buang"] { border-left-color: var(--exhaust); }
+.stroke-tag[data-stroke="siklus"] { border-left-color: var(--line); }
+.state { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; padding: 5px 8px; background: var(--panel); border: 1px solid var(--line); display: inline-flex; gap: 6px; align-items: center; }
+.state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.state[data-state="hidup"]::before { background: #2fa35a; }
+.state[data-state="starter"]::before { background: var(--accent); }
+.state[data-state="limiter"]::before { background: var(--hot); }
+.toolbar { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: end; pointer-events: none; }
+.toolbar > * { pointer-events: auto; }
+.seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 2px; }
+.seg button, .chip { font: 600 13px var(--body); color: var(--ink); background: transparent; border: 0; padding: 7px 11px; border-radius: 2px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.chip { background: var(--panel); border: 1px solid var(--line); }
+.chip[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); }
+.hint { font-size: 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); padding: 4px 8px; border-radius: 3px; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 16px; display: grid; gap: 16px; min-width: 0; }
+.run { font: 800 22px var(--display); letter-spacing: 0.04em; text-transform: uppercase; width: 100%; padding: 13px 12px 11px; border-radius: 3px; border: 2px solid var(--ink); background: var(--accent); color: #1a1405; cursor: pointer; }
+.run[data-on="true"] { background: transparent; color: var(--ink); }
+.ctl { display: grid; gap: 4px; }
+.ctl-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ctl label { font-weight: 600; font-size: 14px; }
+.ctl small { color: var(--muted); font-size: 12.5px; }
+output { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+.readouts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.readout { background: var(--panel); padding: 8px 10px 9px; display: grid; gap: 1px; }
+.readout dt { font-size: 12px; color: var(--muted); }
+.readout dd { margin: 0; font-family: var(--mono); font-size: 19px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.readout dd span { font-size: 11px; color: var(--muted); margin-left: 3px; font-weight: 400; }
+.readout.big { grid-column: span 2; }
+.readout.big dd { font-size: 30px; }
+.gauges { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+figure { margin: 0; display: grid; gap: 4px; min-width: 0; }
+figcaption { font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+canvas.g { width: 100%; height: 150px; display: block; }
+canvas.pv { height: 170px; }
+.wide { grid-column: span 2; }
+.note { font-size: 13.5px; color: var(--ink); margin: 0; min-height: 3em; border-left: 3px solid var(--line); padding-left: 10px; }
+.keys { font-size: 12px; color: var(--muted); margin: 0; }
+kbd { font-family: var(--mono); font-size: 10.5px; border: 1px solid var(--line); border-bottom-width: 2px; padding: 0 4px; border-radius: 2px; }
+
+.sheet { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; border-top: 2px solid var(--ink); padding-top: 14px; }
+.sheet h2 { font-family: var(--display); font-weight: 800; text-transform: uppercase; font-size: 22px; margin: 0 0 6px; letter-spacing: 0.02em; }
+.sheet p, .sheet li { font-size: 14px; color: var(--muted); max-width: 62ch; }
+.sheet p { margin: 0 0 8px; }
+.sheet ul { margin: 0; padding-left: 18px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+td { padding: 4px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+td:last-child { text-align: right; font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; padding-left: 10px; }
+.tag { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent-ink); }
+
+@media (max-width: 980px) {
+  .bench { grid-template-columns: minmax(0, 1fr); }
+  .viewport { height: 64vh; min-height: 380px; }
+  .sheet { grid-template-columns: minmax(0, 1fr); }
+}
+@media (hover: none) { .keys { display: none; } }
+@media (max-width: 520px) {
+  .stroke-tag { font-size: 21px; }
+  .hint { display: none; }
+  .seg button, .chip { padding: 7px 9px; font-size: 12.5px; }
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">Meja uji · 4-tak · pendingin udara · SOHC 2 klep</p>
+      <h1>Mesin Bebek <em>109</em> cc</h1>
+    </div>
+    <p class="lede">Satu silinder yang benar-benar berputar. Seher, stang seher, kruk as, kem, pelatuk, klep, dan rantai keteng digerakkan oleh simulasi tekanan di dalam silinder, lalu diukur dinamo rem.</p>
+  </header>
+
+  <main class="bench">
+    <section class="viewport" aria-label="Model 3D mesin">
+      <div id="stage"></div>
+      <div class="hud">
+        <div class="stroke-tag" id="stroke-tag" data-stroke="usaha">usaha</div>
+        <div class="state" id="state" data-state="mati">Mati</div>
+      </div>
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Tampilan">
+          <button type="button" id="view-utuh" data-view="utuh" aria-pressed="false">Utuh</button>
+          <button type="button" id="view-potong" data-view="potong" aria-pressed="true">Potong</button>
+          <button type="button" id="view-tembus" data-view="tembus" aria-pressed="false">Tembus</button>
+        </div>
+        <span class="hint">Geser untuk memutar, cubit atau gulir untuk zoom</span>
+        <div class="row">
+          <button type="button" class="chip" id="slow" aria-pressed="false">Lambat 1/20</button>
+          <button type="button" class="chip" id="plug-view">Lihat busi</button>
+          <button type="button" class="chip" id="reset">Atur ulang</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel" aria-label="Panel operator">
+      <button type="button" class="run" id="run" data-on="false">Hidupkan mesin</button>
+      <div class="ctl">
+        <div class="ctl-head"><label for="gas">Gas</label><output id="gas-out" for="gas">0%</output></div>
+        <input type="range" id="gas" min="0" max="100" value="0" step="1">
+        <small>Membuka skep karburator. Lihat skep kuningan naik di potongan.</small>
+      </div>
+      <div class="ctl">
+        <div class="ctl-head"><label for="load">Beban dinamo</label><output id="load-out" for="load">0%</output></div>
+        <input type="range" id="load" min="0" max="100" value="0" step="1">
+        <small>Rem cakram di poros keluaran. Tahan putaran untuk membaca tenaga.</small>
+      </div>
+      <div class="row">
+        <button type="button" class="chip" id="sound" aria-pressed="false">Nyalakan suara</button>
+      </div>
+      <dl class="readouts" style="margin:0">
+        <div class="readout big"><dt>Putaran mesin</dt><dd><b id="v-rpm" style="font-weight:500">0</b><span>rpm</span></dd></div>
+        <div class="readout"><dt>Tenaga di dinamo</dt><dd><b id="v-hp" style="font-weight:500">0,0</b><span>hp</span></dd></div>
+        <div class="readout"><dt>Torsi di dinamo</dt><dd><b id="v-tq" style="font-weight:500">0,0</b><span>N·m</span></dd></div>
+        <div class="readout"><dt>Tekanan puncak</dt><dd><b id="v-peak" style="font-weight:500">0</b><span>bar</span></dd></div>
+        <div class="readout"><dt>Pengapian</dt><dd><b id="v-adv" style="font-weight:500">10</b><span>° sblm TMA</span></dd></div>
+        <div class="readout"><dt>Konsumsi bensin</dt><dd><b id="v-fuel" style="font-weight:500">0,00</b><span>l/jam</span></dd></div>
+        <div class="readout"><dt>Suhu cakram rem</dt><dd><b id="v-disc" style="font-weight:500">25</b><span>°C</span></dd></div>
+      </dl>
+      <div class="gauges">
+        <figure><figcaption>Takometer</figcaption><canvas class="g" id="tach" aria-label="Takometer"></canvas></figure>
+        <figure><figcaption>Siklus 720°</figcaption><canvas class="g" id="cycle" aria-label="Roda siklus empat langkah"></canvas></figure>
+        <figure class="wide"><figcaption>Diagram P–V silinder (tekanan log)</figcaption><canvas class="g pv" id="pv" aria-label="Diagram tekanan terhadap volume"></canvas></figure>
+      </div>
+      <p class="note" id="note">Mesin sedang di-starter.</p>
+      <p class="keys"><kbd>Spasi</kbd> hidup/mati · <kbd>↑</kbd><kbd>↓</kbd> gas · <kbd>1</kbd>–<kbd>3</kbd> tampilan · <kbd>S</kbd> lambat · <kbd>B</kbd> lihat busi</p>
+    </aside>
+  </main>
+
+  <section class="sheet">
+    <div>
+      <h2>Cara kerjanya</h2>
+      <p>Satu siklus butuh dua putaran kruk as (720°). Kem berputar setengah kecepatan kruk as lewat rantai keteng, jadi tiap klep membuka sekali per siklus.</p>
+      <p>Tiap derajat putaran, simulasi menghitung volume silinder dari posisi seher, lalu tekanan gas: hisap dari intake manifold, kompresi politropik, pembakaran dengan kurva Wiebe setelah busi memercik, dan buang. Tekanan dikali luas seher dan lengan engkol menjadi torsi yang memutar roda gila.</p>
+    </div>
+    <div>
+      <h2>Spesifikasi</h2>
+      <table>
+        <tr><td>Diameter × langkah</td><td>50 × 55,6 mm</td></tr>
+        <tr><td>Isi silinder</td><td>109 cc</td></tr>
+        <tr><td>Rasio kompresi</td><td>9,3 : 1</td></tr>
+        <tr><td>Klep masuk buka / tutup</td><td>10° sblm TMA / 45° stl TMB</td></tr>
+        <tr><td>Klep buang buka / tutup</td><td>45° sblm TMB / 15° stl TMA</td></tr>
+        <tr><td>Pembatas putaran</td><td>9.500 rpm</td></tr>
+      </table>
+    </div>
+    <div>
+      <h2>Hasil di meja uji</h2>
+      <table>
+        <tr><td>Putaran stasioner</td><td>± 1.350 rpm</td></tr>
+        <tr><td>Torsi puncak</td><td>9,2 N·m @ 5.500</td></tr>
+        <tr><td>Tenaga puncak</td><td>7,6 hp @ 6.500</td></tr>
+        <tr><td>Tekanan puncak, gas penuh</td><td>± 64 bar</td></tr>
+      </table>
+      <p style="margin-top:8px"><span class="tag">Dimodelkan</span> Semua angka di sini keluar dari model ini, bukan data pabrikan mana pun. Tanpa file 3D, gambar, atau rekaman suara: semuanya dibuat dari kode.</p>
+    </div>
+  </section>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/" } }
+</script>
+<script type="module">
+/*APP*/
+</script>
