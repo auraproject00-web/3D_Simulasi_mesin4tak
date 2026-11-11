@@ -1,0 +1,2057 @@
+<title>Meja Uji Mesin Bebek</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Mesin bebek 109,1 cc 4-tak yang berjalan di browser: model three.js prosedural, simulasi tekanan silinder, karbu, choke, kopling sentrifugal, transmisi 4 percepatan, dinamo, dan suara sintesis.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Barlow:wght@400;500;600&family=Martian+Mono:wght@400;500&display=swap">
+<style>
+/* Tata letak: lembar uji bengkel. Panggung 3D besar di kiri, panel operator di kanan; di HP bertumpuk. */
+:root {
+  --bg: #e6ebe5;
+  --panel: #f3f6f1;
+  --ink: #17251e;
+  --muted: #56675e;
+  --line: #c3cdc5;
+  --accent: #d99a06;
+  --accent-ink: #7d5600;
+  --hot: #cc3f17;
+  --intake: #2f6fd6;
+  --exhaust: #7b6e62;
+  --stage: #d7dfd8;
+  --display: "Big Shoulders Display", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+  --mono: "Martian Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101814; --panel: #17211c; --ink: #e2eae4; --muted: #92a399; --line: #2b3a32;
+    --accent: #f0b522; --accent-ink: #f0b522; --hot: #ff6b3f; --intake: #6ea2ff; --exhaust: #b3a596; --stage: #1b2721;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101814; --panel: #17211c; --ink: #e2eae4; --muted: #92a399; --line: #2b3a32;
+  --accent: #f0b522; --accent-ink: #f0b522; --hot: #ff6b3f; --intake: #6ea2ff; --exhaust: #b3a596; --stage: #1b2721;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 18px 40px;
+}
+.wrap { max-width: 1320px; margin: 0 auto; display: grid; gap: 18px; }
+header.top { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 24px; }
+.eyebrow { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
+h1 { font-family: var(--display); font-weight: 800; font-size: clamp(34px, 6vw, 64px); line-height: 0.92; margin: 0; letter-spacing: 0.005em; text-transform: uppercase; text-wrap: balance; }
+h1 em { font-style: normal; color: var(--accent-ink); }
+.lede { margin: 0; max-width: 46ch; color: var(--muted); font-size: 14.5px; }
+
+.bench { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; align-items: start; }
+.viewport { position: relative; border: 1px solid var(--line); background: var(--stage); border-radius: 4px; overflow: hidden; min-width: 0; height: min(78vh, 760px); min-height: 460px; }
+#stage { position: absolute; inset: 0; touch-action: none; }
+#stage canvas { display: block; width: 100%; height: 100%; }
+.hud { position: absolute; left: 12px; top: 12px; right: 12px; display: flex; justify-content: space-between; align-items: start; gap: 8px; pointer-events: none; }
+.stroke-tag { pointer-events: none; font-family: var(--display); font-weight: 800; font-size: 26px; text-transform: uppercase; letter-spacing: 0.02em; line-height: 1; padding: 6px 10px 5px; background: var(--panel); border: 1px solid var(--line); border-left: 5px solid var(--accent); }
+.stroke-tag[data-stroke="usaha"] { border-left-color: var(--hot); }
+.stroke-tag[data-stroke="hisap"] { border-left-color: var(--intake); }
+.stroke-tag[data-stroke="buang"] { border-left-color: var(--exhaust); }
+.stroke-tag[data-stroke="siklus"] { border-left-color: var(--line); }
+.state { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; padding: 5px 8px; background: var(--panel); border: 1px solid var(--line); display: inline-flex; gap: 6px; align-items: center; }
+.state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.state[data-state="hidup"]::before { background: #2fa35a; }
+.state[data-state="starter"]::before { background: var(--accent); }
+.state[data-state="limiter"]::before { background: var(--hot); }
+.toolbar { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: end; pointer-events: none; }
+.toolbar > * { pointer-events: auto; }
+.seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 2px; }
+.seg button, .chip { font: 600 13px var(--body); color: var(--ink); background: transparent; border: 0; padding: 7px 11px; border-radius: 2px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.chip { background: var(--panel); border: 1px solid var(--line); }
+.chip[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); }
+.hint { font-size: 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); padding: 4px 8px; border-radius: 3px; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 16px; display: grid; gap: 16px; min-width: 0; }
+.run { font: 800 22px var(--display); letter-spacing: 0.04em; text-transform: uppercase; width: 100%; padding: 13px 12px 11px; border-radius: 3px; border: 2px solid var(--ink); background: var(--accent); color: #1a1405; cursor: pointer; }
+.run[data-on="true"] { background: transparent; color: var(--ink); }
+.ctl { display: grid; gap: 4px; }
+.ctl-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ctl label { font-weight: 600; font-size: 14px; }
+.ctl small { color: var(--muted); font-size: 12.5px; }
+output { font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+.readouts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.readout { background: var(--panel); padding: 8px 10px 9px; display: grid; gap: 1px; }
+.readout dt { font-size: 12px; color: var(--muted); }
+.readout dd { margin: 0; font-family: var(--mono); font-size: 19px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.readout dd span { font-size: 11px; color: var(--muted); margin-left: 3px; font-weight: 400; }
+.readout.big { grid-column: span 2; }
+.readout.big dd { font-size: 30px; }
+.gauges { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+figure { margin: 0; display: grid; gap: 4px; min-width: 0; }
+figcaption { font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+canvas.g { width: 100%; height: 150px; display: block; }
+canvas.pv { height: 170px; }
+.wide { grid-column: span 2; }
+.note { font-size: 13.5px; color: var(--ink); margin: 0; min-height: 3em; border-left: 3px solid var(--line); padding-left: 10px; }
+.keys { font-size: 12px; color: var(--muted); margin: 0; }
+kbd { font-family: var(--mono); font-size: 10.5px; border: 1px solid var(--line); border-bottom-width: 2px; padding: 0 4px; border-radius: 2px; }
+
+.sheet { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; border-top: 2px solid var(--ink); padding-top: 14px; }
+.sheet h2 { font-family: var(--display); font-weight: 800; text-transform: uppercase; font-size: 22px; margin: 0 0 6px; letter-spacing: 0.02em; }
+.sheet p, .sheet li { font-size: 14px; color: var(--muted); max-width: 62ch; }
+.sheet p { margin: 0 0 8px; }
+.sheet ul { margin: 0; padding-left: 18px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+td { padding: 4px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+td:last-child { text-align: right; font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; padding-left: 10px; }
+.tag { font-family: var(--mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent-ink); }
+
+@media (max-width: 980px) {
+  .bench { grid-template-columns: minmax(0, 1fr); }
+  .viewport { height: 64vh; min-height: 380px; }
+  .sheet { grid-template-columns: minmax(0, 1fr); }
+}
+@media (hover: none) { .keys { display: none; } }
+@media (max-width: 520px) {
+  .stroke-tag { font-size: 21px; }
+  .hint { display: none; }
+  .seg button, .chip { padding: 7px 9px; font-size: 12.5px; }
+}
+
+.readout[data-warn="hot"] dd b { color: var(--hot); }
+.readout[data-warn="cold"] dd b { color: var(--intake); }
+.gearbox { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; }
+.gearbox .seg { justify-self: start; }
+.seg.gears button { min-width: 38px; font-family: var(--display); font-weight: 800; font-size: 17px; padding: 5px 9px 4px; }
+.seg.gears button[data-gear="0"][aria-pressed="true"] { background: #2fa35a; color: #fff; }
+.ctl-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.readouts.small dd { font-size: 16px; }
+.readout dd b { font-weight: 500; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">Meja uji · 4-tak · pendingin udara · SOHC 2 klep · 4 percepatan rotari</p>
+      <h1>Mesin Bebek <em>109,1</em> cc</h1>
+    </div>
+    <p class="lede">Silinder rebah ke depan, karbu di atas, transmisi di belakang kruk as, seperti mesin bebek sungguhan. Tekanan di dalam silinder dihitung tiap derajat engkol, lalu tenaganya diukur dinamo lewat kopling sentrifugal dan gigi.</p>
+  </header>
+
+  <main class="bench">
+    <section class="viewport" aria-label="Model 3D mesin">
+      <div id="stage"></div>
+      <div class="hud">
+        <div class="stroke-tag" id="stroke-tag" data-stroke="siklus">4 langkah</div>
+        <div class="state" id="state" data-state="mati">Mati</div>
+      </div>
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Tampilan">
+          <button type="button" id="view-utuh" data-view="utuh" aria-pressed="false">Utuh</button>
+          <button type="button" id="view-potong" data-view="potong" aria-pressed="true">Potong</button>
+          <button type="button" id="view-tembus" data-view="tembus" aria-pressed="false">Tembus</button>
+        </div>
+        <span class="hint">Geser untuk memutar, cubit atau gulir untuk zoom</span>
+        <div class="row">
+          <button type="button" class="chip" id="slow" aria-pressed="false">Lambat 1/20</button>
+          <button type="button" class="chip" id="plug-view">Lihat busi</button>
+          <button type="button" class="chip" id="gear-view">Lihat transmisi</button>
+          <button type="button" class="chip" id="reset">Atur ulang</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel" aria-label="Panel operator">
+      <button type="button" class="run" id="run" data-on="false">Hidupkan mesin</button>
+      <div class="ctl-row">
+        <button type="button" class="chip" id="choke" aria-pressed="true">Choke: aktif</button>
+        <button type="button" class="chip" id="sound" aria-pressed="false">Nyalakan suara</button>
+      </div>
+      <div class="ctl">
+        <div class="ctl-head"><label for="gas">Gas</label><output id="gas-out" for="gas">0%</output></div>
+        <input type="range" id="gas" min="0" max="100" value="0" step="1">
+        <small>Mengangkat skep karbu. Tekanan intake ikut naik dari vakum ke tekanan udara luar.</small>
+      </div>
+      <div class="gearbox">
+        <span class="ctl"><label>Gigi</label></span>
+        <div class="seg gears" role="group" aria-label="Gigi">
+          <button type="button" id="gear-0" data-gear="0" aria-pressed="true">N</button>
+          <button type="button" id="gear-1" data-gear="1" aria-pressed="false">1</button>
+          <button type="button" id="gear-2" data-gear="2" aria-pressed="false">2</button>
+          <button type="button" id="gear-3" data-gear="3" aria-pressed="false">3</button>
+          <button type="button" id="gear-4" data-gear="4" aria-pressed="false">4</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <div class="ctl-head"><label for="load">Beban dinamo</label><output id="load-out" for="load">0%</output></div>
+        <input type="range" id="load" min="0" max="100" value="0" step="1">
+        <small>Rem arus eddy di belakang, digerakkan rantai dari gir depan 14 ke gir 37.</small>
+      </div>
+      <dl class="readouts" style="margin:0">
+        <div class="readout big"><dt>Putaran mesin</dt><dd><b id="v-rpm">0</b><span>rpm</span></dd></div>
+        <div class="readout"><dt>Kecepatan setara</dt><dd><b id="v-speed">0</b><span>km/jam</span></dd></div>
+        <div class="readout"><dt>Kopling</dt><dd><b id="v-clutch">netral</b></dd></div>
+        <div class="readout"><dt>Tenaga di dinamo</dt><dd><b id="v-hp">0,00</b><span>hp</span></dd></div>
+        <div class="readout"><dt>Torsi di dinamo</dt><dd><b id="v-tq">0,0</b><span>N·m</span></dd></div>
+        <div class="readout"><dt>Suhu kepala silinder</dt><dd><b id="v-head">30</b><span>°C</span></dd></div>
+        <div class="readout"><dt>Campuran (AFR)</dt><dd><b id="v-afr">–</b><span>: 1</span></dd></div>
+        <div class="readout"><dt>Tekanan intake</dt><dd><b id="v-map">101</b><span>kPa</span></dd></div>
+        <div class="readout"><dt>Konsumsi bensin</dt><dd><b id="v-fuel">0,00</b><span>l/jam</span></dd></div>
+        <div class="readout"><dt>Tekanan puncak</dt><dd><b id="v-peak">0</b><span>bar</span></dd></div>
+        <div class="readout"><dt>Pengapian CDI</dt><dd><b id="v-adv">10</b><span>° sblm TMA</span></dd></div>
+      </dl>
+      <div class="gauges">
+        <figure><figcaption>Takometer</figcaption><canvas class="g" id="tach" aria-label="Takometer dan gigi"></canvas></figure>
+        <figure><figcaption>Siklus 720°</figcaption><canvas class="g" id="cycle" aria-label="Roda siklus empat langkah"></canvas></figure>
+        <figure class="wide"><figcaption>Diagram P–V silinder (tekanan log)</figcaption><canvas class="g pv" id="pv" aria-label="Diagram tekanan terhadap volume"></canvas></figure>
+      </div>
+      <p class="note" id="note">Mesin sedang di-starter.</p>
+      <p class="keys"><kbd>Spasi</kbd> hidup/mati · <kbd>↑</kbd><kbd>↓</kbd> gas · <kbd>Q</kbd><kbd>E</kbd> gigi · <kbd>C</kbd> choke · <kbd>1</kbd>–<kbd>3</kbd> tampilan · <kbd>S</kbd> lambat · <kbd>B</kbd> busi · <kbd>T</kbd> transmisi</p>
+    </aside>
+  </main>
+
+  <section class="sheet">
+    <div>
+      <h2>Cara kerjanya</h2>
+      <p>Satu siklus butuh dua putaran kruk as (720°). Kem berputar setengah kecepatan lewat rantai keteng, jadi tiap klep membuka sekali per siklus.</p>
+      <p>Karbu mengatur aliran udara lewat skep: tekanan intake dihitung dari aliran kompresibel yang sama dengan yang dihisap silinder. Campuran ditentukan jet, jarum, dan choke. Bensin mengembun di dinding mesin yang dingin, jadi tanpa choke campuran terlalu kurus dan mesin tersendat.</p>
+      <p>Di bawah ±1.800 rpm sepatu kopling sentrifugal belum mengembang, jadi motor bisa stasioner dalam gigi. Di atasnya kopling menggigit dan tenaga lewat gigi primer 69/17, gigi transmisi, lalu rantai ke dinamo.</p>
+    </div>
+    <div>
+      <h2>Spesifikasi</h2>
+      <table>
+        <tr><td>Diameter × langkah</td><td>50 × 55,6 mm</td></tr>
+        <tr><td>Isi silinder</td><td>109,1 cc</td></tr>
+        <tr><td>Rasio kompresi</td><td>9,0 : 1</td></tr>
+        <tr><td>Reduksi primer</td><td>4,059 (69/17)</td></tr>
+        <tr><td>Gigi 1 / 2 / 3 / 4</td><td>2,615 / 1,550 / 1,136 / 0,916</td></tr>
+        <tr><td>Reduksi akhir</td><td>2,642 (37/14)</td></tr>
+        <tr><td>Kopling</td><td>sentrifugal otomatis + manual basah</td></tr>
+      </table>
+      <p style="margin-top:8px"><span class="tag">Dipublikasikan</span> Angka di atas dan tenaga maksimum 6,22 kW @ 7.500 rpm serta torsi 8,59 N·m @ 5.500 rpm berasal dari spesifikasi mesin bebek 110 cc kelas ini.</p>
+    </div>
+    <div>
+      <h2>Hasil model</h2>
+      <table>
+        <tr><td>Putaran stasioner, hangat</td><td>± 1.400 rpm</td></tr>
+        <tr><td>Torsi kruk as, gas penuh</td><td>8,7 N·m @ 5.500–6.000</td></tr>
+        <tr><td>Tenaga kruk as</td><td>6,2 kW (8,3 hp) @ 7.500</td></tr>
+        <tr><td>Kopling mulai menggigit</td><td>± 1.800 rpm</td></tr>
+        <tr><td>Pembatas putaran CDI</td><td>9.600 rpm</td></tr>
+      </table>
+      <p style="margin-top:8px"><span class="tag">Dimodelkan</span> Bukaan klep, kurva pengapian, efisiensi volumetrik, gesekan, kopling, dan suhu dimodelkan lalu dikalibrasi ke angka publikasi. Dinamo membaca ±8% lebih rendah karena rugi transmisi. Pemanasan mesin dipercepat 6×. Tanpa file 3D, gambar, atau rekaman suara: semuanya dibuat dari kode.</p>
+    </div>
+  </section>
+</div>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+// ---- kit.js ----
+const __m_kit = (() => {
+// Material dan alat bantu geometri bersama. Satuan dunia: sentimeter. Sumbu z = sumbu kruk as.
+
+
+
+const V2 = (x, y) => new THREE.Vector2(x, y);
+const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+const Y_AXIS = V3(0, 1, 0);
+
+// bidang potong: tampilan "Potong" menyimpan z <= 0 dan membuang sisi kanan mesin
+const cutPlane = new THREE.Plane(V3(0, 0, -1), 0);
+const sectioned = [];   // material rumah mesin yang ikut terpotong
+
+function castShader(m, grain, hatch) {
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+      varying vec3 vWPos;
+      float h3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+      float vn(vec3 x) {
+        vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
+                   mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z);
+      }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+      float castN = vn(vWPos * 2.4) * 0.5 + vn(vWPos * 8.0) * 0.3 + vn(vWPos * 29.0) * 0.2;
+      diffuseColor.rgb *= 1.0 + (castN - 0.5) * 0.18 * ${grain.toFixed(2)};
+      ${hatch ? `if (!gl_FrontFacing) {
+        float hh = step(0.55, fract((gl_FragCoord.x + gl_FragCoord.y) / 7.0));
+        diffuseColor.rgb = mix(vec3(0.95, 0.66, 0.08), vec3(0.42, 0.25, 0.02), hh * 0.75);
+      }` : ''}`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+      roughnessFactor = clamp(roughnessFactor + (castN - 0.5) * 0.3 * ${grain.toFixed(2)}, 0.05, 1.0);`);
+  };
+  m.customProgramCacheKey = () => `cast${grain}${hatch}`;
+}
+// material rumah mesin: butiran cor + arsiran kuning di bidang potong
+function housingMat(params, grain = 1, hatch = true) {
+  const m = new THREE.MeshStandardMaterial(params);
+  m.side = THREE.DoubleSide;
+  castShader(m, grain, hatch);
+  sectioned.push(m);
+  return m;
+}
+function castMat(params, grain = 1) { const m = new THREE.MeshStandardMaterial(params); castShader(m, grain, false); return m; }
+const std = (o) => new THREE.MeshStandardMaterial(o);
+
+const MAT = {
+  caseAlu: housingMat({ color: 0xc3c7c2, metalness: 0.55, roughness: 0.46 }, 1),
+  coverAlu: housingMat({ color: 0xd9dcd7, metalness: 0.75, roughness: 0.26 }, 0.45),
+  finPaint: housingMat({ color: 0x24282a, metalness: 0.35, roughness: 0.55 }, 0.7),
+  machined: housingMat({ color: 0xe4e6e2, metalness: 0.95, roughness: 0.22 }, 0.2),
+  headAlu: housingMat({ color: 0xc9ccc7, metalness: 0.6, roughness: 0.4 }, 1),
+  exhaust: housingMat({ color: 0x3b3a37, metalness: 0.75, roughness: 0.42 }, 0.5, false),
+  chromeH: housingMat({ color: 0xe9ebe8, metalness: 1.0, roughness: 0.12 }, 0, false),
+  rubberH: housingMat({ color: 0x1d201f, metalness: 0.1, roughness: 0.82 }, 0.4, false),
+  rubberS: housingMat({ color: 0x1d201f, metalness: 0.1, roughness: 0.82 }, 0.4),
+  boltH: housingMat({ color: 0xa4a9a4, metalness: 0.9, roughness: 0.28 }, 0),
+  steel: std({ color: 0xd9dcd8, metalness: 0.92, roughness: 0.24 }),
+  steelDark: std({ color: 0x5c615e, metalness: 0.85, roughness: 0.36 }),
+  gearSteel: std({ color: 0xaab0ad, metalness: 0.9, roughness: 0.3 }),
+  black: std({ color: 0x1f2321, metalness: 0.3, roughness: 0.6 }),
+  rubber: std({ color: 0x1c1d1d, metalness: 0.05, roughness: 0.85 }),
+  chain: std({ color: 0x3a3f3c, metalness: 0.8, roughness: 0.4 }),
+  brass: std({ color: 0xc89b45, metalness: 0.85, roughness: 0.3 }),
+  spring: std({ color: 0x4d7a57, metalness: 0.6, roughness: 0.4 }),
+  porcelain: std({ color: 0xf1efe8, metalness: 0, roughness: 0.25 }),
+  nickel: std({ color: 0xbdb8ab, metalness: 0.95, roughness: 0.32 }),
+  zinc: std({ color: 0xdadcd4, metalness: 0.92, roughness: 0.2 }),
+  chrome: std({ color: 0xe9ebe8, metalness: 1, roughness: 0.1 }),
+  frame: castMat({ color: 0x2f5a46, metalness: 0.25, roughness: 0.55 }, 0.35),
+  dyno: castMat({ color: 0x23453a, metalness: 0.3, roughness: 0.5 }, 0.4),
+  floor: std({ color: 0x8a918c, metalness: 0.4, roughness: 0.62 }),
+  accent: std({ color: 0xe2a20c, metalness: 0.2, roughness: 0.5 }),
+  red: std({ color: 0xb2341c, metalness: 0.1, roughness: 0.45 }),
+  hose: new THREE.MeshPhysicalMaterial({ color: 0xd8c18a, metalness: 0, roughness: 0.15, transmission: 0.55, thickness: 0.3, transparent: true, opacity: 0.85 }),
+  fuel: std({ color: 0xc98a1a, metalness: 0, roughness: 0.2, emissive: 0x2a1500 }),
+  carbBody: castMat({ color: 0xb9bcb6, metalness: 0.6, roughness: 0.38 }, 0.8),
+  engaged: std({ color: 0xe2a20c, metalness: 0.6, roughness: 0.3, emissive: 0x3a2400 }),
+};
+
+function mesh(geo, mat, parent, shadow = true) {
+  const m = new THREE.Mesh(geo, mat);
+  m.castShadow = shadow; m.receiveShadow = shadow;
+  if (parent) parent.add(m);
+  return m;
+}
+function box(w, h, d, mat, x, y, z, parent) { const m = mesh(new THREE.BoxGeometry(w, h, d), mat, parent); m.position.set(x, y, z); return m; }
+function rbox(w, h, d, r, mat, x, y, z, parent) { const m = mesh(new RoundedBoxGeometry(w, h, d, 3, r), mat, parent); m.position.set(x, y, z); return m; }
+function zCyl(r, len, mat, x, y, z, parent, seg = 32) {
+  const g = new THREE.CylinderGeometry(r, r, len, seg); g.rotateX(Math.PI / 2);
+  const m = mesh(g, mat, parent); m.position.set(x, y, z); return m;
+}
+// batang kotak di antara dua titik
+function bar(a, b, w, d, mat, parent) {
+  const m = mesh(new THREE.BoxGeometry(w, a.distanceTo(b), d), mat, parent);
+  m.position.copy(a).add(b).multiplyScalar(0.5);
+  m.quaternion.setFromUnitVectors(Y_AXIS, b.clone().sub(a).normalize());
+  return m;
+}
+// pipa bulat di antara dua titik
+function rod(a, b, r, mat, parent, seg = 16) {
+  const m = mesh(new THREE.CylinderGeometry(r, r, a.distanceTo(b), seg), mat, parent);
+  m.position.copy(a).add(b).multiplyScalar(0.5);
+  m.quaternion.setFromUnitVectors(Y_AXIS, b.clone().sub(a).normalize());
+  return m;
+}
+// roda gigi lurus dengan profil gigi trapesium, sumbu z, tebal `depth`
+function gearGeo(r, teeth, depth, hole = 0.35) {
+  const s = new THREE.Shape(), root = r - Math.min(0.45, r * 0.12), n = teeth;
+  for (let i = 0; i < n; i++) {
+    const a0 = (i / n) * Math.PI * 2, w = (Math.PI * 2) / n;
+    const pts = [[root, a0], [r, a0 + w * 0.22], [r, a0 + w * 0.48], [root, a0 + w * 0.7]];
+    pts.forEach(([rr, a], k) => { const p = [Math.cos(a) * rr, Math.sin(a) * rr]; i === 0 && k === 0 ? s.moveTo(...p) : s.lineTo(...p); });
+  }
+  s.closePath();
+  if (hole > 0) { const hp = new THREE.Path(); hp.absarc(0, 0, r * hole, 0, Math.PI * 2, true); s.holes.push(hp); }
+  const g = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 1, curveSegments: 6 });
+  g.translate(0, 0, -depth / 2);
+  return g;
+}
+function sprocketGeo(r, teeth, depth) {
+  const s = new THREE.Shape(), n = teeth, root = r - 0.42;
+  for (let i = 0; i <= n * 6; i++) {
+    const a = (i / (n * 6)) * Math.PI * 2, k = (i % 6) / 6;
+    const rr = root + (r - root) * Math.pow(Math.sin(Math.PI * k), 0.6);
+    const p = [Math.cos(a) * rr, Math.sin(a) * rr]; i === 0 ? s.moveTo(...p) : s.lineTo(...p);
+  }
+  const hp = new THREE.Path(); hp.absarc(0, 0, Math.min(1.0, r * 0.3), 0, Math.PI * 2, true); s.holes.push(hp);
+  const g = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: false }); g.translate(0, 0, -depth / 2); return g;
+}
+function helixGeo(turns, radius, wire, height = 1) {
+  const pts = [];
+  for (let i = 0; i <= turns * 24; i++) { const t = i / (turns * 24), a = t * turns * Math.PI * 2; pts.push(V3(Math.cos(a) * radius, t * height, Math.sin(a) * radius)); }
+  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), turns * 24, wire, 6, false);
+}
+// baut kepala segi enam dengan ring, menghadap `axis`
+function bolt(x, y, z, axis, parent, mat = MAT.boltH, size = 1) {
+  const g = new THREE.Group(); g.position.set(x, y, z);
+  const head = mesh(new THREE.CylinderGeometry(0.34 * size, 0.34 * size, 0.36 * size, 6), mat, g); head.position.y = 0.3 * size;
+  mesh(new THREE.CylinderGeometry(0.46 * size, 0.46 * size, 0.1 * size, 18), mat, g).position.y = 0.06 * size;
+  if (axis === 'z') g.rotation.x = Math.PI / 2; else if (axis === '-z') g.rotation.x = -Math.PI / 2;
+  else if (axis === 'x') g.rotation.z = -Math.PI / 2; else if (axis === '-x') g.rotation.z = Math.PI / 2; else if (axis === '-y') g.rotation.x = Math.PI;
+  else if (axis && axis.isVector3) g.quaternion.setFromUnitVectors(Y_AXIS, axis.clone().normalize());
+  if (parent) parent.add(g);
+  return g;
+}
+// lembar sirip pendingin persegi dengan lubang bulat, dicat dengan tepi dibubut (dua material)
+function finPlate(y, t, hx, zFront, zBack, holeR, parent, rr = 0.9, mats = [MAT.finPaint, MAT.machined]) {
+  const s = new THREE.Shape();
+  const x0 = -hx, x1 = hx, y0 = -zFront, y1 = -zBack;
+  s.moveTo(x0 + rr, y0); s.lineTo(x1 - rr, y0); s.absarc(x1 - rr, y0 + rr, rr, -Math.PI / 2, 0, false);
+  s.lineTo(x1, y1 - rr); s.absarc(x1 - rr, y1 - rr, rr, 0, Math.PI / 2, false);
+  s.lineTo(x0 + rr, y1); s.absarc(x0 + rr, y1 - rr, rr, Math.PI / 2, Math.PI, false);
+  s.lineTo(x0, y0 + rr); s.absarc(x0 + rr, y0 + rr, rr, Math.PI, Math.PI * 1.5, false);
+  const hole = new THREE.Path(); hole.absarc(0, 0, holeR, 0, Math.PI * 2, true); s.holes.push(hole);
+  const g = new THREE.ExtrudeGeometry(s, { depth: t, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.05, bevelSegments: 1, curveSegments: 10 });
+  g.rotateX(-Math.PI / 2); g.translate(0, y, 0);
+  return mesh(g, mats, parent);
+}
+// kulit tipis dari dua garis luar (luar & dalam) yang dibuka di satu sisi, diekstrusi sepanjang z
+function shellWall(outer, inner, z0, z1, mat, parent) {
+  const s = new THREE.Shape();
+  outer.forEach((p, i) => (i ? s.lineTo(p.x, p.y) : s.moveTo(p.x, p.y)));
+  for (let i = inner.length - 1; i >= 0; i--) s.lineTo(inner[i].x, inner[i].y);
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: z1 - z0, bevelEnabled: false, curveSegments: 4 });
+  g.translate(0, 0, z0);
+  return mesh(g, mat, parent);
+}
+// tutup samping dari garis luar tertutup, dengan tepi membulat
+function plate(outline, z0, depth, bevel, mat, parent, holes = []) {
+  const s = new THREE.Shape();
+  outline.forEach((p, i) => (i ? s.lineTo(p.x, p.y) : s.moveTo(p.x, p.y)));
+  s.closePath();
+  for (const h of holes) { const hp = new THREE.Path(); hp.absarc(h[0], h[1], h[2], 0, Math.PI * 2, true); s.holes.push(hp); }
+  const g = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 3, curveSegments: 8 });
+  g.translate(0, 0, z0);
+  return mesh(g, mat, parent);
+}
+// selubung cembung dari kumpulan lingkaran [x, y, r] dan titik tambahan, berlawanan arah jarum jam
+function hullOf(circles, extra = [], seg = 72) {
+  const raw = [];
+  for (const [cx, cy, r] of circles) for (let i = 0; i < seg; i++) { const a = (i / seg) * Math.PI * 2; raw.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); }
+  for (const p of extra) raw.push(p);
+  raw.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], up = [];
+  for (const p of raw) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (let i = raw.length - 1; i >= 0; i--) { const p = raw[i]; while (up.length >= 2 && cross(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+  return lo.slice(0, -1).concat(up.slice(0, -1)).map(([x, y]) => V2(x, y));
+}
+// rantai roller yang berjalan di sekeliling dua gir; update(s) menggeser rantai sejauh s (cm)
+function chainLoop(c1, r1, c2, r2, z, parent, pitch = 0.635, width = 0.55) {
+  const hull = hullOf([[c1.x, c1.y, r1], [c2.x, c2.y, r2]], [], 120);
+  const seg = []; let total = 0;
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i], b = hull[(i + 1) % hull.length], l = a.distanceTo(b);
+    seg.push({ a, b, l, s: total }); total += l;
+  }
+  const count = Math.round(total / pitch);
+  const im = new THREE.InstancedMesh(new THREE.BoxGeometry(pitch * 0.92, 0.26, width), MAT.chain, count);
+  im.castShadow = true; parent.add(im);
+  const pins = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.11, 0.11, width + 0.16, 8).rotateX(Math.PI / 2), MAT.steel, count);
+  parent.add(pins);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = V3(0, 0, 0), sc = V3(1, 1, 1), zAx = V3(0, 0, 1);
+  function at(s) {
+    s = ((s % total) + total) % total;
+    let lo = 0, hi = seg.length - 1;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (seg[m].s <= s) lo = m; else hi = m - 1; }
+    const g = seg[lo], t = (s - g.s) / g.l;
+    return [g.a.x + (g.b.x - g.a.x) * t, g.a.y + (g.b.y - g.a.y) * t, Math.atan2(g.b.y - g.a.y, g.b.x - g.a.x)];
+  }
+  return {
+    update(shift) {
+      for (let i = 0; i < count; i++) {
+        const [x, y, ang] = at(shift + (i / count) * total);
+        pos.set(x, y, z); q.setFromAxisAngle(zAx, ang); m4.compose(pos, q, sc); im.setMatrixAt(i, m4);
+        const [px, py] = at(shift + ((i + 0.5) / count) * total); pos.set(px, py, z); m4.compose(pos, q, sc); pins.setMatrixAt(i, m4);
+      }
+      im.instanceMatrix.needsUpdate = true; pins.instanceMatrix.needsUpdate = true;
+    },
+  };
+}
+
+function canvasTex(w, h, draw, srgb = true) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const glowTex = canvasTex(64, 64, (x) => {
+  const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,0.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
+});
+function perforation(rx = 5, ry = 3) {
+  const t = canvasTex(128, 64, (x) => {
+    x.fillStyle = '#fff'; x.fillRect(0, 0, 128, 64); x.fillStyle = '#000';
+    for (let j = 0; j < 4; j++) for (let i = 0; i < 8; i++) { x.beginPath(); x.arc(8 + i * 16 + (j % 2) * 8, 8 + j * 16, 4.6, 0, Math.PI * 2); x.fill(); }
+  }, false);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry);
+  return t;
+}
+
+return { housingMat, castMat, mesh, box, rbox, zCyl, bar, rod, gearGeo, sprocketGeo, helixGeo, bolt, finPlate, shellWall, plate, hullOf, chainLoop, canvasTex, perforation, V2, V3, Y_AXIS, cutPlane, sectioned, MAT, glowTex };
+})();
+
+// ---- sim/engine.js ----
+const __m_sim_engine = (() => {
+// Mesin bebek 1 silinder 4-tak, 109,1 cc. Geometri, bukaan klep, dan model termodinamika per derajat engkol.
+// Angka yang dipublikasikan untuk mesin kelas ini: 50 × 55,6 mm, kompresi 9,0 : 1,
+// 6,22 kW @ 7.500 rpm, 8,59 N·m @ 5.500 rpm. Semua yang lain di sini dimodelkan.
+
+const SPEC = {
+  bore: 0.050, stroke: 0.0556, rod: 0.0905, cr: 9.0,
+  inertia: 0.0074,          // kruk as + rotor magnet, kg·m²
+  limiter: 9600,            // CDI memotong pengapian
+  ambientC: 30,
+  heatSpeedup: 6,           // pemanasan mesin dipercepat agar terlihat di layar
+};
+
+const PA = 101325;
+const R_AIR = 287, GAM = 1.4;
+const TAU = Math.PI * 2;
+const CYCLE = Math.PI * 4;
+const r = SPEC.stroke / 2, L = SPEC.rod;
+const AREA = Math.PI * SPEC.bore ** 2 / 4;
+const VD = AREA * SPEC.stroke;
+const VC = VD / (SPEC.cr - 1);
+const deg = (d) => (d * Math.PI) / 180;
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+// tinggi pena seher dari sumbu kruk as (m), θ = 0 di TMA
+function pinHeight(th) { const s = Math.sin(th); return r * Math.cos(th) + Math.sqrt(L * L - r * r * s * s); }
+function dPin(th) { const s = Math.sin(th), c = Math.cos(th); return -r * s - (r * r * s * c) / Math.sqrt(L * L - r * r * s * s); }
+function volume(th) { return VC + AREA * (r + L - pinHeight(th)); }
+const VBDC = volume(Math.PI);
+
+const TIMING = { ivo: -10, ivc: 220, evo: 500, evc: 730 }; // derajat siklus, 0 = TMA awal hisap
+function camLift(phi, open, close, max) {
+  let a = ((phi * 180) / Math.PI) % 720; if (a < 0) a += 720;
+  let o = open, c = close;
+  if (o < 0) { o += 720; }
+  if (c < o) c += 720;
+  if (a < o) a += 720;
+  if (a > c) return 0;
+  const t = (a - o) / (c - o), s = Math.sin(Math.PI * t);
+  return max * s * s;
+}
+const intakeLift = (phi) => camLift(phi, TIMING.ivo, TIMING.ivc, 0.0062);
+const exhaustLift = (phi) => camLift(phi, TIMING.evo, TIMING.evc, 0.0058);
+const STROKES = ['hisap', 'kompresi', 'usaha', 'buang'];
+function strokeIndex(phi) { return Math.floor((((phi % CYCLE) + CYCLE) % CYCLE) / Math.PI); }
+
+// pengapian CDI: maju dari 10° di stasioner sampai 32° di atas 4.500 rpm
+function advanceAt(rpm) { return 10 + 22 * clamp((rpm - 1900) / 2600, 0, 1); }
+
+// efisiensi volumetrik (karbu skep 20 mm, porting standar)
+function veAt(rpm) {
+  const n = rpm / 1000;
+  return 0.66 + 0.25 * Math.exp(-(((n - 6.7) / 4.0) ** 2)) - 0.014 * Math.max(0, n - 9) ** 2;
+}
+
+// karburator: lambda dasar dari jet stasioner, jarum, dan jet utama
+function carbLambda(thr, rpm) {
+  const base = 0.96 + 0.07 * Math.exp(-(((thr - 0.32) / 0.2) ** 2));   // part-throttle sedikit irit
+  const power = 0.1 * clamp((thr - 0.65) / 0.3, 0, 1);                 // pengayaan di bukaan besar
+  return base - power - 0.015 * clamp((rpm - 7000) / 2000, 0, 1);
+}
+
+// aliran kompresibel melewati skep
+const A_MAX = Math.PI * 0.01 ** 2, A_IDLE = 1.6e-6, CD = 0.72;
+function throttleArea(thr) { return A_IDLE + (A_MAX - A_IDLE) * Math.pow(clamp(thr, 0, 1), 2.0); }
+function orificeFlow(area, p0, T0, p) {
+  const pr = Math.max(p / p0, 0.5283);
+  const psi = Math.sqrt((2 * GAM / (GAM - 1)) * (Math.pow(pr, 2 / GAM) - Math.pow(pr, (GAM + 1) / GAM)));
+  return CD * area * p0 / Math.sqrt(R_AIR * T0) * psi;
+}
+// tekanan intake setimbang: aliran skep = aliran yang dihisap silinder
+function manifoldEquilibrium(thr, rpm, chokeOn) {
+  if (rpm < 20) return PA;
+  const area = throttleArea(thr) * (chokeOn ? 0.8 : 1);
+  const draw = (p) => veAt(rpm) * VD * (rpm / 120) * p / (R_AIR * 300);
+  let lo = 0.02 * PA, hi = PA;
+  for (let i = 0; i < 26; i++) {
+    const m = (lo + hi) / 2;
+    if (orificeFlow(area, PA, 300, m) > draw(m)) lo = m; else hi = m;
+  }
+  return (lo + hi) / 2;
+}
+
+// faktor torsi terhadap campuran: puncak di λ ≈ 0,88
+function lambdaTorque(l) { return clamp(1 - 2.2 * (l - 0.88) ** 2, 0.15, 1); }
+function misfireChance(l) { return clamp((l - 1.2) / 0.28, 0, 1) + clamp((0.6 - l) / 0.14, 0, 1); }
+
+function gauss() { let u = 0, v = 0; while (u === 0) u = Math.random(); v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(TAU * v); }
+
+return { pinHeight, dPin, volume, strokeIndex, advanceAt, veAt, carbLambda, throttleArea, manifoldEquilibrium, lambdaTorque, misfireChance, gauss, SPEC, PA, CYCLE, AREA, VD, VC, deg, clamp, VBDC, TIMING, intakeLift, exhaustLift, STROKES };
+})();
+
+// ---- sim/bench.js ----
+const __m_sim_bench = (() => {
+// Meja uji: mesin + kopling sentrifugal + transmisi 4 percepatan + dinamo arus eddy di poros output.
+const { SPEC, PA, CYCLE, AREA, VD, VBDC, deg, clamp, volume, dPin, intakeLift, exhaustLift, advanceAt, veAt, carbLambda, manifoldEquilibrium, lambdaTorque, misfireChance, gauss, TIMING } = __m_sim_engine;
+
+const GEARBOX = {
+  primary: 69 / 17,                                // 4,059
+  ratios: [0, 34 / 13, 28 / 18, 25 / 22, 22 / 24], // N, 1-4
+  final: 37 / 14,                                  // 2,642
+  wheelR: 0.288,                                   // ban 80/90-17
+  efficiency: 0.92,
+};
+const I_DRUM = 0.0012;          // rumah kopling + gigi primer, dirujuk ke kruk as
+const I_OUT = 0.32;             // rotor dinamo + poros output
+const DYNO_MAX = 400;           // N·m di poros output (rem arus eddy)
+const DYNO_WS = 300;            // rad/s, torsi naik sebanding putaran lalu jenuh
+const SHIFT_TIME = 0.28;        // detik kopling manual terlepas saat memindah gigi
+
+function createBench() {
+  const st = {
+    phi: deg(400), omega: 0, rpm: 0,
+    drum: 0, out: 0, locked: false, clutchTq: 0, clutchState: 'lepas',
+    gear: 0, shiftT: 0, pendingGear: 0,
+    throttle: 0, load: 0, choke: true, fuel: false, starter: false, running: false,
+    pMan: PA, p: PA, pIvc: PA, burnQ: 0, xb: 0, peakP: 0, lastPeak: 0, misfire: false, limiter: false,
+    lambda: 1, lambdaEff: 1, xr: 0.1, advance: 10, burnDur: 50,
+    headC: SPEC.ambientC, warm: 0,
+    dynoTq: 0, dynoPower: 0, crankTq: 0, fuelLph: 0, airKgs: 0,
+    events: [], time: 0, pv: [], pvLast: [], cycleN: 0,
+  };
+  let fired = false, evoDone = false, ivcDone = false, evcDone = false, pendingAfterfire = false;
+
+  const ratio = () => GEARBOX.primary * GEARBOX.ratios[st.gear];
+  const connected = () => st.gear > 0 && st.shiftT <= 0;
+
+  function pressure(phi) {
+    const c = ((phi % CYCLE) + CYCLE) % CYCLE;
+    const V = volume(c);
+    const pex = PA * (1.03 + 0.000007 * st.rpm);
+    if (c < Math.PI) {                                   // hisap
+      const k = Math.min(1, c / deg(28));
+      st.xb = 0;
+      return pex + (st.pMan - pex) * k;
+    }
+    const ign = Math.PI * 2 - deg(st.advance), dur = deg(st.burnDur);
+    let xb = 0;
+    if (st.burnQ > 0 && c > ign) {
+      const t = Math.min(1, (c - ign) / dur);
+      xb = 1 - Math.exp(-5 * Math.pow(t, 3));
+    }
+    st.xb = xb;
+    const decomp = st.rpm < 300 ? 0.72 : 0;                // dekompresor otomatis saat starter
+    let poly = st.pIvc * Math.pow(VBDC / V, 1.32) * (1 + st.burnQ * xb);
+    poly = PA + (poly - PA) * (1 - decomp);
+    const evo = deg(TIMING.evo);
+    if (c < evo) return poly;
+    if (c < 3 * Math.PI) { const t = (c - evo) / (3 * Math.PI - evo); return pex + (poly - pex) * Math.pow(1 - t, 2.2); }
+    return pex;
+  }
+
+  function lockCharge(rpm) {
+    st.pIvc = st.pMan * veAt(rpm) / 0.95;
+    const pex = PA * (1.03 + 0.000007 * rpm);
+    st.xr = clamp((1 / SPEC.cr) * Math.pow(pex / Math.max(st.pIvc, 5000), 1 / 1.3) * 0.36, 0.02, 0.4);
+    st.lambda = carbLambda(st.throttle, rpm) * (st.choke ? 0.62 : 1);
+    st.lambdaEff = st.lambda * (1 + 0.36 * (1 - st.warm));      // bensin mengembun di dinding dingin
+    const air = st.pIvc * VBDC * 0.95 * (1 - st.xr) / (287 * 320);
+    const can = st.fuel && rpm > 150;
+    st.limiter = st.fuel && rpm >= SPEC.limiter;
+    const sigma = 0.018 + 0.3 * Math.max(0, st.xr - 0.04) + 0.05 * (1 - st.warm) * (st.choke ? 0 : 1);
+    const miss = Math.random() < misfireChance(st.lambdaEff) || (rpm < 400 && Math.random() < 0.15);
+    st.misfire = can && (miss || st.limiter);
+    const dil = 1 - 1.5 * Math.max(0, st.xr - 0.04);
+    st.burnQ = can && !st.misfire ? 3.86 * lambdaTorque(st.lambdaEff) * dil * Math.max(0.6, 1 + sigma * gauss()) : 0;
+    st.burnDur = 40 + 0.0032 * rpm + 140 * st.xr + 30 * Math.max(0, st.lambdaEff - 1.05);
+    const fuelKg = can && !st.limiter ? air / (14.7 * st.lambda) : 0;
+    st.airKgs = air * rpm / 120;
+    st.fuelLph = fuelKg * (rpm / 120) * 3600 / 0.74;
+    if (st.misfire && st.fuel && !st.limiter) pendingAfterfire = true;
+    return fuelKg;
+  }
+
+  let heatIn = 0, slipAcc = 0, spinAcc = 0;
+  function micro(h) {
+    st.time += h;
+    const c0 = ((st.phi % CYCLE) + CYCLE) % CYCLE;
+    const rpm = st.omega * 30 / Math.PI;
+    st.rpm = rpm;
+    st.advance = advanceAt(rpm);
+    const p = pressure(st.phi);
+    st.p = p;
+    if (p > st.peakP) st.peakP = p;
+
+    const cold = 1 - st.warm;
+    const T_gas = (p - PA) * AREA * -dPin(st.phi);
+    const T_fric = Math.sign(st.omega) * (0.55 + 0.000155 * rpm + 1.25e-8 * rpm * rpm) * (1 + 0.45 * cold);
+    const T_start = st.starter ? Math.max(0, 6.8 * (1 - rpm / 720)) : 0;
+    const T_eng = T_gas + T_start - T_fric;
+
+    // kopling sentrifugal: gaya sepatu ∝ ω², melawan pegas yang menahan sampai ±1.800 rpm
+    const cap = Math.min(220, 3.2e-6 * Math.max(0, rpm * rpm - 1800 * 1800));
+    const conn = connected();
+    const R = conn ? ratio() : 1;
+    const wOutEq = conn ? st.out : 0;
+    const dynoT = st.load * DYNO_MAX * (st.out / DYNO_WS) / (1 + st.out / DYNO_WS);   // di poros output
+    st.dynoTq = dynoT;
+    const drumLoad = conn ? (dynoT / R) / GEARBOX.efficiency + 0.08 : 0.04;  // dirujuk ke kruk as
+    const Id = I_DRUM + (conn ? I_OUT / (R * R) : 0);
+    let Tc;
+    if (st.locked) {
+      const a = (T_eng - drumLoad) / (SPEC.inertia + Id);
+      Tc = T_eng - SPEC.inertia * a;
+      if (Math.abs(Tc) > cap || cap <= 0) st.locked = false;
+    }
+    if (st.locked) {
+      const a = (T_eng - drumLoad) / (SPEC.inertia + Id);
+      st.omega += a * h; st.drum = st.omega;
+    } else {
+      const slip = st.omega - st.drum;
+      Tc = cap * Math.sign(slip);
+      const wE = st.omega + ((T_eng - Tc) / SPEC.inertia) * h;
+      let wD = st.drum + ((Tc - drumLoad * Math.sign(st.drum || 1)) / Id) * h;
+      if (wD < 0) wD = 0;
+      if (cap > 0 && Math.sign(wE - wD) !== Math.sign(slip) && slip !== 0) {
+        const w = (SPEC.inertia * wE + Id * wD) / (SPEC.inertia + Id);
+        st.omega = w; st.drum = w; st.locked = true;
+      } else { st.omega = wE; st.drum = wD; }
+    }
+    st.clutchTq = Tc || 0;
+    if (st.omega < 0) st.omega = 0;                       // tidak berputar mundur
+    if (conn) st.out = st.drum / R;
+    else st.out = Math.max(0, st.out - ((dynoT + 0.8 + 0.03 * st.out) / I_OUT) * h);
+
+    st.phi += st.omega * h;
+    st.crankTq = T_eng;
+    heatIn += Math.max(0, T_fric * st.omega) * h * 0.5;
+    slipAcc += Math.abs(st.omega - st.drum) * h; spinAcc += Math.abs(st.omega) * h;
+    const c1 = ((st.phi % CYCLE) + CYCLE) % CYCLE;
+    if (st.pv.length < 1600) st.pv.push(volume(c1) / VD, p / 1e5);
+
+    const crossed = (a) => c0 < a && c1 >= a && c1 - c0 < Math.PI;
+    if (crossed(Math.PI)) {
+      const fuelKg = lockCharge(rpm);
+      heatIn += fuelKg * 44e6 * (st.burnQ > 0 ? 0.24 : 0.04);
+      fired = false; evoDone = false; ivcDone = false; evcDone = false;
+    }
+    if (!ivcDone && crossed(deg(TIMING.ivc))) { ivcDone = true; st.events.push({ type: 'valve', which: 'in', t: st.time }); }
+    const ign = Math.PI * 2 - deg(st.advance);
+    if (!fired && crossed(ign)) {
+      fired = true;
+      if (st.fuel && rpm > 150) st.events.push({ type: 'spark', t: st.time, lit: st.burnQ > 0 });
+    }
+    if (!evoDone && crossed(deg(TIMING.evo))) {
+      evoDone = true;
+      st.events.push({ type: 'exhaust', t: st.time, k: st.burnQ > 0 ? st.peakP / 4e6 : 0.04, lit: st.burnQ > 0, rich: st.lambdaEff < 0.75 });
+      if (pendingAfterfire && st.burnQ > 0 && st.headC > 70 && Math.random() < 0.5) st.events.push({ type: 'afterfire', t: st.time + 0.004 });
+      if (st.burnQ > 0) pendingAfterfire = false;
+    }
+    if (!evcDone && c1 > deg(10) && c1 < deg(40) && c0 < deg(10)) { evcDone = true; st.events.push({ type: 'valve', which: 'ex', t: st.time }); }
+    if (c1 < c0 && st.omega > 0) {
+      st.lastPeak = st.peakP; st.peakP = 0;
+      st.pvLast = st.pv; st.pv = [];
+      st.cycleN++;
+      st.events.push({ type: 'cycle', t: st.time });
+      if (st.burnQ > 0 && !st.running && rpm > 550) { st.running = true; st.events.push({ type: 'caught', t: st.time }); }
+    }
+    if (st.running && rpm < 180) st.running = false;
+  }
+
+  function step(dt) {
+    if (st.shiftT > 0) {
+      st.shiftT -= dt;
+      if (st.shiftT <= 0) engageGear();
+    }
+    // tekanan intake mengejar titik setimbang dengan konstanta waktu ± 25 ms
+    const target = manifoldEquilibrium(st.throttle, st.rpm, st.choke);
+    st.pMan += (target - st.pMan) * (1 - Math.exp(-dt / 0.025));
+    const sub = Math.max(1, Math.min(700, Math.ceil(Math.abs(st.omega) * dt / deg(1.5))));
+    const h = dt / sub;
+    heatIn = 0; slipAcc = 0; spinAcc = 0;
+    for (let i = 0; i < sub; i++) micro(h);
+    st.rpm = st.omega * 30 / Math.PI;
+    // suhu kepala silinder, dengan kipas meja uji
+    const dT = st.headC - SPEC.ambientC;
+    const cool = 1.6 * dT + 0.16 * dT * dT;
+    st.headC += ((heatIn / Math.max(dt, 1e-6) - cool) / 1800) * SPEC.heatSpeedup * dt;
+    st.warm = clamp((st.headC - SPEC.ambientC) / 45, 0, 1);
+    const R = connected() ? ratio() : 0;
+    st.dynoPower = st.dynoTq * st.out;
+    st.locked = st.locked && st.rpm > 1;
+    const slipRatio = spinAcc > 0 ? slipAcc / spinAcc : 0;
+    const cap = Math.min(220, 3.2e-6 * Math.max(0, st.rpm * st.rpm - 1800 * 1800));
+    st.clutchState = cap <= 0 ? 'lepas' : slipRatio < 0.03 ? 'menyatu' : 'selip';
+    st.speedKmh = st.out / GEARBOX.final * GEARBOX.wheelR * 3.6;
+    st.ratioTotal = R;
+  }
+
+  function engageGear() {
+    st.gear = st.pendingGear; st.shiftT = 0;
+    if (st.gear > 0) {
+      const R = ratio(), Iref = I_OUT / (R * R);
+      // kopling manual menyatu: momentum rumah kopling dan poros output digabung
+      const w = (I_DRUM * st.drum + Iref * st.out * R) / (I_DRUM + Iref);
+      st.drum = w; st.out = w / R;
+      if (st.locked) { const wl = (SPEC.inertia * st.omega + (I_DRUM + Iref) * w) / (SPEC.inertia + I_DRUM + Iref); st.omega = wl; st.drum = wl; st.out = wl / R; }
+    }
+  }
+
+  return {
+    state: st, step,
+    clearEvents() { st.events.length = 0; },
+    key() { st.fuel = true; st.starter = true; },
+    release() { st.starter = false; },
+    stop() { st.fuel = false; st.starter = false; st.running = false; st.fuelLph = 0; st.burnQ = 0; },
+    setThrottle(v) { st.throttle = clamp(v, 0, 1); },
+    setLoad(v) { st.load = clamp(v, 0, 1); },
+    setChoke(v) { st.choke = !!v; },
+    // gigi rotari: N-1-2-3-4-N
+    shift(dir) {
+      const from = st.shiftT > 0 ? st.pendingGear : st.gear;
+      const to = (from + (dir > 0 ? 1 : 4)) % 5;
+      st.pendingGear = to; st.shiftT = SHIFT_TIME;
+      st.events.push({ type: 'shift', t: st.time, to });
+      return to;
+    },
+    setGear(g) { st.pendingGear = clamp(Math.round(g), 0, 4); st.shiftT = SHIFT_TIME; st.events.push({ type: 'shift', t: st.time, to: st.pendingGear }); },
+    shiftingTo() { return st.shiftT > 0 ? st.pendingGear : st.gear; },
+    pressureAt: pressure,
+    // untuk kalibrasi: tahan putaran kruk as tetap dan ukur torsi rata-rata
+    holdSpeed(rpm, seconds, opts = {}) {
+      st.fuel = true; st.running = true; st.starter = false;
+      if (opts.warm !== undefined) { st.headC = SPEC.ambientC + 45 * opts.warm; st.warm = opts.warm; }
+      const w = rpm * Math.PI / 30, dt = 1 / 240;
+      let sum = 0, n = 0;
+      for (let t = 0; t < seconds; t += dt) {
+        st.pMan = manifoldEquilibrium(st.throttle, rpm, st.choke);
+        const sub = Math.ceil(w * dt / deg(1));
+        for (let i = 0; i < sub; i++) {
+          st.omega = w; st.drum = 0; st.locked = false; st.gear = 0;
+          const keep = st.load; st.load = 0;
+          micro(dt / sub);
+          st.load = keep;
+          if (t > seconds * 0.25) { sum += st.crankTq; n++; }
+        }
+        st.events.length = 0;
+        if (opts.fixHeat) { st.headC = SPEC.ambientC + 45 * (opts.warm ?? 1); st.warm = opts.warm ?? 1; }
+      }
+      return sum / n;
+    },
+  };
+}
+
+return { createBench, GEARBOX };
+})();
+
+// ---- model/engine3d.js ----
+const __m_model_engine3d = (() => {
+// Model mesin bebek: silinder rebah 80° ke depan, karbu di atas kepala silinder, knalpot lewat bawah,
+// transmisi di belakang kruk as, kopling sentrifugal di ujung kanan kruk as, magnet di kiri.
+
+const { V2, V3, Y_AXIS, MAT, mesh, box, rbox, zCyl, bar, rod, gearGeo, sprocketGeo, helixGeo, bolt, finPlate, shellWall, plate, hullOf, chainLoop, perforation, housingMat } = __m_kit;
+const { SPEC, pinHeight, intakeLift, exhaustLift, CYCLE, clamp } = __m_sim_engine;
+const { GEARBOX } = __m_sim_bench;
+
+const TILT = (80 * Math.PI) / 180;
+const CR = SPEC.stroke * 50, ROD = SPEC.rod * 100;
+const DECK = 5.6;                                   // dudukan blok silinder di bak mesin (lokal)
+const MAIN = V2(-6.0, -2.3), COUNTER = V2(-10.6, -0.5);
+const PRIMARY_D = 6.43, GEAR_D = MAIN.distanceTo(COUNTER);
+
+function buildEngine(root) {
+  const engine = new THREE.Group(); root.add(engine);
+  const cyl = new THREE.Group(); cyl.rotation.z = -TILT; engine.add(cyl);
+  const toWorld = (x, y, z = 0) => V3(x, y, z).applyAxisAngle(V3(0, 0, 1), -TILT);
+  const parts = {};
+
+  /* ===== bak mesin (koordinat dunia) ===== */
+  const deckL = toWorld(-3.9, DECK), deckR = toWorld(3.9, DECK);
+  const deckLi = toWorld(-3.25, DECK), deckRi = toWorld(3.25, DECK);
+  const outerHull = hullOf([[0, 0, 5.5], [MAIN.x, MAIN.y, 4.0], [COUNTER.x, COUNTER.y, 4.4], [-4.5, -5.0, 1.6]], [[deckL.x, deckL.y], [deckR.x, deckR.y]]);
+  const innerHull = hullOf([[0, 0, 4.9], [MAIN.x, MAIN.y, 3.4], [COUNTER.x, COUNTER.y, 3.85], [-4.5, -4.5, 1.2]], [[deckLi.x, deckLi.y], [deckRi.x, deckRi.y]]);
+  function openPath(hull, a, b) {
+    const ia = hull.findIndex((p) => p.distanceTo(V2(a.x, a.y)) < 1e-6), ib = hull.findIndex((p) => p.distanceTo(V2(b.x, b.y)) < 1e-6);
+    const n = hull.length, out = [];
+    let start = (ia + 1) % n === ib ? ib : ia, end = start === ib ? ia : ib;
+    for (let i = start; ; i = (i + 1) % n) { out.push(hull[i]); if (i === end) break; }
+    return out;
+  }
+  const outerPath = openPath(outerHull, deckL, deckR);
+  let innerPath = openPath(innerHull, deckLi, deckRi);
+  if (innerPath[0].distanceTo(outerPath[0]) > innerPath[innerPath.length - 1].distanceTo(outerPath[0])) innerPath = innerPath.reverse();
+  const Z_L = -5.0, Z_R = 4.0;
+  shellWall(outerPath, innerPath, Z_L, Z_R, MAT.caseAlu, engine);
+  // garis belahan tengah bak mesin
+  shellWall(outerPath.map((p) => p.clone().multiplyScalar(1.004)), outerPath, -0.25, 0.25, MAT.caseAlu, engine);
+  // dinding samping kiri & kanan bak mesin
+  plate(outerHull, Z_L - 0.6, 0.6, 0, MAT.caseAlu, engine);
+  plate(outerHull, Z_R, 0.6, 0, MAT.caseAlu, engine);
+  // dudukan silinder (neck) agar dinding bak menyambung ke blok
+  // lug gantungan atas dan baut pivot belakang
+  rbox(3.0, 3.2, 3.4, 0.5, MAT.caseAlu, -2.4, 5.6, 0, engine);
+  zCyl(0.55, 18.6, MAT.steel, -2.4, 6.2, -4.3, engine, 16);
+  zCyl(1.5, 9.6, MAT.caseAlu, -13.6, 1.6, -0.5, engine, 32);
+  zCyl(0.55, 18.6, MAT.steel, -13.6, 1.6, -4.3, engine, 16);
+  // baut pembuangan oli
+  bolt(-4.6, -6.55, 0, '-y', engine, MAT.boltH, 1.2);
+
+  // oli di dasar bak mesin (terlihat di tampilan potong)
+  {
+    const level = -3.9, poly = [];
+    for (let i = 0; i < innerHull.length; i++) {
+      const a = innerHull[i], b = innerHull[(i + 1) % innerHull.length];
+      const ia = a.y < level, ib = b.y < level;
+      if (ia) poly.push(a);
+      if (ia !== ib) { const t = (level - a.y) / (b.y - a.y); poly.push(V2(a.x + (b.x - a.x) * t, level)); }
+    }
+    const s = new THREE.Shape(poly);
+    const g = new THREE.ExtrudeGeometry(s, { depth: Z_R - Z_L - 0.1, bevelEnabled: false }); g.translate(0, 0, Z_L + 0.05);
+    const oilMat = new THREE.MeshStandardMaterial({ color: 0x8a5a10, metalness: 0.1, roughness: 0.08, transparent: true, opacity: 0.72, side: THREE.DoubleSide });
+    parts.oil = mesh(g, oilMat, engine, false); parts.oil.renderOrder = 1; parts.oilMat = oilMat;
+  }
+
+  /* ===== tutup kiri: magnet (ACG), tutup gir depan ===== */
+  {
+    const prof = [V2(0.001, 0), V2(6.7, 0), V2(6.75, -0.3), V2(6.6, -1.8), V2(6.2, -2.8), V2(5.2, -3.5), V2(2.4, -3.75), V2(0.001, -3.8)].reverse();
+    const g = new THREE.LatheGeometry(prof, 64); g.rotateX(-Math.PI / 2);
+    const acg = mesh(g, MAT.coverAlu, engine); acg.position.z = Z_L - 0.6;
+    acg.scale.set(1, 1, 1);
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + 0.2; bolt(Math.cos(a) * 6.15, Math.sin(a) * 6.15, Z_L - 1.0, '-z', engine); }
+    // tutup lubang pengintip tanda pengapian
+    zCyl(0.9, 0.5, MAT.boltH, 3.2, 2.6, Z_L - 4.15, engine, 24);
+    // tutup gir depan dan tuas pemindah gigi
+    const sc = hullOf([[COUNTER.x, COUNTER.y, 2.6], [MAIN.x, MAIN.y, 2.0]]);
+    plate(sc, Z_L - 2.2, 1.6, 0.35, MAT.coverAlu, engine, []);
+    parts.shiftPivot = V3(MAIN.x + 0.6, MAIN.y - 1.2, Z_L - 2.6);
+    const pedal = new THREE.Group(); pedal.position.copy(parts.shiftPivot); engine.add(pedal);
+    zCyl(0.55, 1.0, MAT.steelDark, 0, 0, -0.3, pedal, 18);
+    bar(V3(0, 0, -0.7), V3(7.5, -4.2, -1.6), 0.7, 0.45, MAT.steelDark, pedal);   // depan (injak)
+    bar(V3(0, 0, -0.7), V3(-6.0, -3.0, -1.6), 0.7, 0.45, MAT.steelDark, pedal);  // belakang (tumit)
+    mesh(new THREE.CylinderGeometry(0.45, 0.45, 2.4, 14).rotateX(Math.PI / 2), MAT.rubber, pedal).position.set(7.5, -4.2, -2.6);
+    mesh(new THREE.CylinderGeometry(0.45, 0.45, 2.4, 14).rotateX(Math.PI / 2), MAT.rubber, pedal).position.set(-6.0, -3.0, -2.6);
+    parts.pedal = pedal;
+  }
+
+  /* ===== tutup kanan: kopling, selah, pengisi oli ===== */
+  const coverR = hullOf([[0, 0, 4.7], [MAIN.x, MAIN.y, 5.9], [COUNTER.x + 0.6, COUNTER.y - 0.6, 3.2]]);
+  {
+    plate(coverR, Z_R + 0.6, 2.8, 0.7, MAT.coverAlu, engine);
+    const boss = mesh(new THREE.CylinderGeometry(2.6, 3.0, 1.0, 48).rotateX(Math.PI / 2), MAT.coverAlu, engine); boss.position.set(0, 0, Z_R + 4.5);
+    const cap = mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.5, 40).rotateX(Math.PI / 2), MAT.boltH, engine); cap.position.set(0, 0, Z_R + 5.05);
+    coverR.forEach((p, i) => { if (i % 9 === 0) bolt(p.x * 0.93 + MAIN.x * 0.07, p.y * 0.93 + MAIN.y * 0.07, Z_R + 4.15, 'z', engine); });
+    // tutup pengisi oli dengan tongkat ukur
+    const fill = V3(-8.6, 3.0, Z_R + 2.0);
+    zCyl(0.8, 1.2, MAT.coverAlu, fill.x, fill.y, fill.z, engine, 24);
+    const knob = mesh(new THREE.CylinderGeometry(1.0, 1.0, 1.2, 16), MAT.rubberS, engine); knob.position.set(fill.x, fill.y + 1.0, fill.z);
+    // selah (kick starter)
+    const kick = new THREE.Group(); kick.position.set(COUNTER.x - 0.8, COUNTER.y - 1.6, Z_R + 4.0); kick.rotation.z = 0.35; engine.add(kick);
+    mesh(new THREE.CylinderGeometry(0.75, 0.75, 1.6, 20).rotateX(Math.PI / 2), MAT.rubberS, kick).position.z = 0.4;
+    rbox(0.9, 9.0, 0.7, 0.3, MAT.rubberS, 0.2, 4.4, 1.2, kick).rotation.z = -0.15;
+    rbox(1.1, 1.1, 3.4, 0.35, MAT.rubberS, 0.9, 8.8, 2.4, kick);
+  }
+
+  /* ===== blok silinder & kepala (koordinat silinder) ===== */
+  {
+    const ri = 2.5, ro = 3.15, yb = 4.4, yt = 14.2;
+    const wall = [V2(ri, yb), V2(2.95, yb), V2(2.95, DECK), V2(ro + 0.55, DECK), V2(ro + 0.55, DECK + 0.45), V2(ro, DECK + 0.75), V2(ro, yt - 0.4), V2(ro + 0.45, yt - 0.3), V2(ro + 0.45, yt), V2(ri, yt), V2(ri, yb)];
+    mesh(new THREE.LatheGeometry(wall, 56), MAT.finPaint, cyl);
+    for (let y = 6.55, i = 0; y < 13.6; y += 0.8, i++) {
+      const k = Math.sin(((i + 0.5) / 9) * Math.PI);
+      finPlate(y, 0.28, 4.6 + 0.8 * k, 4.1 + 0.6 * k, -2.95, ro - 0.05, cyl, 0.8);
+    }
+    const gk = [V2(ri, 14.2), V2(4.4, 14.2), V2(4.4, 14.35), V2(ri, 14.35), V2(ri, 14.2)];
+    mesh(new THREE.LatheGeometry(gk, 56), MAT.boltH, cyl);
+    // kepala silinder dengan ruang bakar kubah
+    const pts = [V2(2.5, 14.35), V2(4.3, 14.35), V2(4.3, 19.2), V2(0.001, 19.2), V2(0.001, 15.25)];
+    for (let a = 4; a <= 90; a += 4) { const t = (a * Math.PI) / 180; pts.push(V2(2.5 * Math.sin(t), 14.35 + 0.9 * Math.cos(t))); }
+    mesh(new THREE.LatheGeometry(pts, 56), MAT.headAlu, cyl);
+    for (let y = 14.8, i = 0; y < 18.8; y += 0.78, i++) finPlate(y, 0.28, 5.7 - i * 0.12, 5.1 - i * 0.1, -2.95, 4.25, cyl, 1.0, [MAT.headAlu, MAT.machined]);
+    rbox(8.6, 4.3, 6.2, 0.7, MAT.coverAlu, 0, 21.1, 0, cyl);
+    for (const z of [-1.6, 0, 1.6]) rbox(6.4, 0.35, 0.5, 0.15, MAT.coverAlu, 0, 23.35, z, cyl);
+    rbox(6.6, 18.4, 2.5, 0.55, MAT.finPaint, 0, 15.0, -4.05, cyl);                // terowongan rantai keteng
+    for (const sx of [-1, 1]) {                                                    // tutup setelan klep
+      const c = mesh(new THREE.CylinderGeometry(1.45, 1.55, 0.9, 40), MAT.coverAlu, cyl); c.rotation.z = Math.PI / 2; c.position.set(sx * 4.55, 20.5, 0);
+      const hx = mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.5, 6), MAT.boltH, cyl); hx.rotation.z = Math.PI / 2; hx.position.set(sx * 5.2, 20.5, 0);
+    }
+    for (const [x, z] of [[-3.5, 2.5], [3.5, 2.5], [-3.5, -2.5], [3.5, -2.5]]) bolt(x, 23.45, z, null, cyl);
+    const cc = mesh(new THREE.CylinderGeometry(2.4, 2.4, 0.6, 40), MAT.coverAlu, cyl); cc.rotation.x = Math.PI / 2; cc.position.set(0, 20.9, -5.55);
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; bolt(Math.cos(a) * 1.85, 20.9 + Math.sin(a) * 1.85, -5.85, '-z', cyl); }
+    // flens saluran masuk (atas) dan buang (bawah)
+    const fin = mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.5, 28), MAT.headAlu, cyl); fin.rotation.z = Math.PI / 2; fin.position.set(-4.5, 16.4, 0);
+    const fex = mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.45, 28), MAT.boltH, cyl); fex.rotation.z = Math.PI / 2; fex.position.set(4.6, 16.3, 0);
+    for (const s of [-1, 1]) { bolt(4.85, 16.3 + s * 1.15, 0, 'x', cyl, MAT.boltH, 0.8); }
+  }
+
+  /* ===== bagian bergerak (koordinat silinder) ===== */
+  const gasMat = new THREE.MeshBasicMaterial({ color: 0x4c8cff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const gas = mesh(new THREE.CylinderGeometry(2.46, 2.46, 1, 40), gasMat, cyl, false); gas.renderOrder = 2;
+  const piston = new THREE.Group(); cyl.add(piston);
+  {
+    const prof = [V2(2.3, -2.6), V2(2.47, -2.6), V2(2.47, 2.0), V2(2.2, 2.2), V2(0.001, 2.2)];
+    mesh(new THREE.LatheGeometry(prof, 48), MAT.steel, piston);
+    for (const y of [1.65, 1.25, 0.85]) { const ring = mesh(new THREE.TorusGeometry(2.47, 0.07, 6, 48), MAT.steelDark, piston); ring.rotation.x = Math.PI / 2; ring.position.y = y; }
+    zCyl(0.62, 4.4, MAT.steelDark, 0, 0, 0, piston);
+    for (const z of [-1.2, 1.2]) zCyl(0.95, 0.5, MAT.steel, 0, 0, z, piston, 24);
+  }
+  const crank = new THREE.Group(); cyl.add(crank);
+  {
+    const s = new THREE.Shape();
+    s.moveTo(1.45, CR); s.absarc(0, CR, 1.45, 0, Math.PI, false);
+    const a0 = (200 * Math.PI) / 180, a1 = (340 * Math.PI) / 180;
+    s.lineTo(3.5 * Math.cos(a0), 3.5 * Math.sin(a0)); s.absarc(0, 0, 3.5, a0, a1, false); s.lineTo(1.45, CR);
+    for (const z of [-1.35, 1.35]) {
+      const g = new THREE.ExtrudeGeometry(s, { depth: 0.9, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.08, bevelSegments: 2, curveSegments: 32 });
+      g.translate(0, 0, z - 0.45); mesh(g, MAT.steelDark, crank);
+    }
+    zCyl(0.85, 2.2, MAT.steel, 0, CR, 0, crank);
+    zCyl(1.15, 4.6, MAT.steel, 0, 0, -4.1, crank);
+    zCyl(1.0, 6.2, MAT.steel, 0, 0, 4.9, crank);
+    const sp = mesh(sprocketGeo(1.35, 14, 0.5), MAT.chain, crank); sp.position.z = -4.2;
+    // rotor magnet (roda gila) di dalam tutup kiri
+    const rot = mesh(new THREE.CylinderGeometry(5.3, 5.3, 1.8, 64, 1, true).rotateX(Math.PI / 2), MAT.steelDark, crank); rot.position.z = -7.0;
+    zCyl(5.3, 0.3, MAT.steelDark, 0, 0, -7.85, crank, 64);
+    zCyl(1.6, 0.6, MAT.steel, 0, 0, -8.1, crank);
+    box(0.5, 2.6, 0.12, MAT.accent, 0, 3.7, -8.03, crank);
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; box(1.6, 0.9, 1.6, MAT.black, Math.cos(a) * 4.7, Math.sin(a) * 4.7, -7.0, crank).rotation.z = a + Math.PI / 2; }
+  }
+  // stator spul di dalam rotor (diam)
+  {
+    const st = new THREE.Group(); st.position.z = -7.0; engine.add(st);
+    zCyl(2.2, 1.4, MAT.steelDark, 0, 0, 0, st, 24);
+    for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; const c = box(1.2, 1.4, 1.2, MAT.brass, Math.cos(a) * 3.4, Math.sin(a) * 3.4, 0, st); c.rotation.z = a; }
+  }
+  const rodG = new THREE.Group(); cyl.add(rodG);
+  {
+    mesh(new THREE.TorusGeometry(1.25, 0.42, 12, 32), MAT.steel, rodG);
+    mesh(new THREE.TorusGeometry(0.85, 0.3, 10, 24), MAT.steel, rodG).position.y = ROD;
+    mesh(new THREE.BoxGeometry(0.8, ROD - 2.4, 0.7), MAT.steel, rodG).position.y = ROD / 2 + 0.2;
+    box(1.2, ROD - 3.2, 0.35, MAT.steel, 0, ROD / 2 + 0.1, 0, rodG);
+    box(3.4, 0.45, 0.9, MAT.steelDark, 0, -1.55, 0, rodG);
+  }
+
+  /* klep, pegas, kem, pelatuk */
+  const T = (18 * Math.PI) / 180, STEM = 5.2, CAM_C = V3(0, 20.9, 0), CAM_BASE = 0.95;
+  const valves = [
+    { seat: V3(-1.25, 15.05, 0), dir: V3(-Math.sin(T), Math.cos(T), 0), lift: intakeLift, pivot: V3(-1.75, 21.55, 0.55), camAng: (125 * Math.PI) / 180, peak: (105 * Math.PI) / 180, sign: 1, z: 0.55 },
+    { seat: V3(1.25, 15.05, 0), dir: V3(Math.sin(T), Math.cos(T), 0), lift: exhaustLift, pivot: V3(1.75, 21.55, -0.55), camAng: (55 * Math.PI) / 180, peak: (615 * Math.PI) / 180, sign: -1, z: -0.55 },
+  ];
+  const camshaft = new THREE.Group(); camshaft.position.copy(CAM_C); cyl.add(camshaft);
+  zCyl(0.45, 5.8, MAT.steel, 0, 0, -1.6, camshaft);
+  mesh(sprocketGeo(2.7, 28, 0.5), MAT.chain, camshaft).position.z = -4.2;
+  box(0.3, 2.2, 0.08, MAT.accent, 0, 1.4, -3.92, camshaft);
+  for (const v of valves) {
+    const g = new THREE.Group(); cyl.add(g);
+    mesh(new THREE.CylinderGeometry(0.95, 0.75, 0.22, 32), MAT.steel, g);
+    mesh(new THREE.CylinderGeometry(0.17, 0.17, STEM, 12), MAT.steel, g).position.y = STEM / 2;
+    mesh(new THREE.CylinderGeometry(0.58, 0.58, 0.22, 20), MAT.steelDark, g).position.y = STEM - 0.35;
+    g.quaternion.setFromUnitVectors(Y_AXIS, v.dir); v.group = g;
+    v.top = v.seat.clone().addScaledVector(v.dir, STEM);
+    const sp = mesh(helixGeo(6, 0.48, 0.07), MAT.spring, cyl);
+    sp.quaternion.setFromUnitVectors(Y_AXIS, v.dir); sp.position.copy(v.seat.clone().addScaledVector(v.dir, 2.35)); v.spring = sp;
+    const s = new THREE.Shape();
+    for (let i = 0; i <= 96; i++) {
+      const a = (i / 96) * Math.PI * 2, k = Math.abs(Math.atan2(Math.sin(a), Math.cos(a)));
+      const lobe = k < 1.05 ? Math.pow(Math.cos((k / 1.05) * Math.PI / 2), 2) : 0, rr = CAM_BASE + 0.42 * lobe;
+      i === 0 ? s.moveTo(Math.cos(a) * rr, Math.sin(a) * rr) : s.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+    const lg = new THREE.ExtrudeGeometry(s, { depth: 0.75, bevelEnabled: false }); lg.translate(0, 0, v.z - 0.375);
+    const lw = new THREE.Group(); mesh(lg, MAT.steel, lw); camshaft.add(lw); v.lobe = lw;
+    const rk = new THREE.Group(); rk.position.copy(v.pivot); cyl.add(rk);
+    const camEnd = V3(Math.cos(v.camAng) * CAM_BASE, Math.sin(v.camAng) * CAM_BASE, 0).add(CAM_C).setZ(v.z);
+    const valveEnd = v.top.clone().addScaledVector(v.dir, 0.12).setZ(v.z), P = v.pivot;
+    bar(V3(0, 0, 0), camEnd.clone().sub(P), 0.5, 0.6, MAT.steelDark, rk);
+    bar(V3(0, 0, 0), valveEnd.clone().sub(P), 0.5, 0.6, MAT.steelDark, rk);
+    mesh(new THREE.BoxGeometry(0.5, 0.3, Math.abs(v.z) * 2 + 0.4), MAT.steelDark, rk).position.copy(valveEnd.clone().sub(P)).setZ(-v.z);
+    zCyl(0.32, 1.0, MAT.steel, 0, 0, 0, rk, 16);
+    v.rocker = rk; v.lever = valveEnd.distanceTo(P);
+    zCyl(0.2, 6.4, MAT.steelDark, P.x, P.y, -1.0, cyl, 12);
+  }
+  const camChain = chainLoop(V2(0, 0), 1.5, V2(CAM_C.x, CAM_C.y), 2.85, -4.2, cyl);
+  // penegang rantai
+  bar(V3(1.9, 4.0, -4.2), V3(2.9, 17.5, -4.2), 0.4, 0.7, MAT.black, cyl);
+
+  /* ===== kopling sentrifugal & gigi primer (kanan) ===== */
+  const clutch = new THREE.Group(); engine.add(clutch);
+  const drum = new THREE.Group(); drum.position.z = Z_R + 1.7; clutch.add(drum);
+  {
+    const prof = [V2(0.9, 2.4), V2(4.1, 2.4), V2(4.1, 2.0), V2(3.85, 1.9), V2(3.85, -0.2), V2(4.1, -0.2), V2(4.1, -0.5), V2(0.9, -0.5)].reverse();
+    const g = new THREE.LatheGeometry(prof, 64, Math.PI * 0.55, Math.PI * 1.75); g.rotateX(Math.PI / 2);
+    mesh(g, MAT.gearSteel, drum);
+    const pg = mesh(gearGeo(1.32, 17, 0.9), MAT.gearSteel, drum); pg.position.z = -1.3;
+  }
+  const shoes = [];
+  const shoeGroup = new THREE.Group(); shoeGroup.position.z = Z_R + 2.4; clutch.add(shoeGroup);
+  for (let i = 0; i < 3; i++) {
+    const g = new THREE.Group(); g.rotation.z = (i / 3) * Math.PI * 2; shoeGroup.add(g);
+    const s = new THREE.Shape(); s.absarc(0, 0, 3.75, -0.85, 0.85, false); s.absarc(0, 0, 2.6, 0.85, -0.85, true);
+    const sg = new THREE.ExtrudeGeometry(s, { depth: 1.5, bevelEnabled: false, curveSegments: 12 }); sg.translate(0, 0, -0.75);
+    const shoe = new THREE.Group(); g.add(shoe);
+    mesh(sg, MAT.steelDark, shoe);
+    const lin = new THREE.Shape(); lin.absarc(0, 0, 3.82, -0.8, 0.8, false); lin.absarc(0, 0, 3.72, 0.8, -0.8, true);
+    const lg = new THREE.ExtrudeGeometry(lin, { depth: 1.4, bevelEnabled: false, curveSegments: 12 }); lg.translate(0, 0, -0.7);
+    mesh(lg, MAT.red, shoe);
+    const spring = mesh(helixGeo(7, 0.22, 0.05, 2.2), MAT.spring, g); spring.rotation.z = Math.PI / 2 + 1.05; spring.position.set(Math.cos(1.05) * 2.5, Math.sin(1.05) * 2.5, 0);
+    shoes.push(shoe);
+  }
+  zCyl(2.4, 0.5, MAT.steel, 0, 0, Z_R + 1.3, shoeGroup.parent, 40);
+  // gigi primer besar dan kopling manual di poros utama
+  const mainR = new THREE.Group(); mainR.position.set(MAIN.x, MAIN.y, Z_R + 0.4); clutch.add(mainR);
+  mesh(gearGeo(PRIMARY_D * 69 / 86, 69, 0.9, 0.5), MAT.gearSteel, mainR);
+  const basket = mesh(new THREE.CylinderGeometry(3.3, 3.3, 2.6, 48, 1, true).rotateX(Math.PI / 2), MAT.gearSteel, mainR); basket.position.z = 1.9;
+  for (let i = 0; i < 5; i++) zCyl(3.1, 0.18, i % 2 ? MAT.red : MAT.steel, 0, 0, 1.0 + i * 0.45, mainR, 40);
+  zCyl(3.2, 0.35, MAT.steel, 0, 0, 3.3, mainR, 40);
+  for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2; mesh(helixGeo(5, 0.32, 0.06, 1.1).rotateX(Math.PI / 2), MAT.spring, mainR).position.set(Math.cos(a) * 1.6, Math.sin(a) * 1.6, 2.0); }
+
+  /* ===== transmisi 4 percepatan (terlihat di tampilan potong) ===== */
+  const gearbox = new THREE.Group(); engine.add(gearbox);
+  const mainShaft = new THREE.Group(); mainShaft.position.set(MAIN.x, MAIN.y, 0); gearbox.add(mainShaft);
+  const counterShaft = new THREE.Group(); counterShaft.position.set(COUNTER.x, COUNTER.y, 0); gearbox.add(counterShaft);
+  zCyl(0.6, 11.5, MAT.steel, 0, 0, -0.2, mainShaft);
+  zCyl(0.7, 13.6, MAT.steel, 0, 0, -1.4, counterShaft);
+  const GZ = [-3.4, -1.95, -0.5, 0.95];
+  const pairs = [];
+  for (let g = 1; g <= 4; g++) {
+    const ratio = GEARBOX.ratios[g], tm = [13, 18, 22, 24][g - 1], tc = [34, 28, 25, 22][g - 1];
+    const rm = GEAR_D * tm / (tm + tc), rc = GEAR_D * tc / (tm + tc);
+    const gm = new THREE.Group(); gm.position.z = GZ[g - 1]; mainShaft.add(gm);
+    const gc = new THREE.Group(); gc.position.set(COUNTER.x, COUNTER.y, GZ[g - 1]); gearbox.add(gc);
+    const mm = mesh(gearGeo(rm, tm, 0.95, 0.3), MAT.gearSteel, gm);
+    const mc = mesh(gearGeo(rc, tc, 0.95, 0.22), MAT.gearSteel, gc);
+    // gigi anjing (dog) di sisi gigi
+    for (let k = 0; k < 4; k++) { const a = (k / 4) * Math.PI * 2; box(0.35, 0.35, 0.3, MAT.steelDark, Math.cos(a) * rc * 0.45, Math.sin(a) * rc * 0.45, 0.6, gc); }
+    pairs.push({ ratio, gm, gc, mm, mc, tm, tc });
+  }
+  // gigi geser (sliding dog) di poros output
+  const slider = new THREE.Group(); counterShaft.add(slider);
+  mesh(gearGeo(1.6, 20, 0.7, 0.4), MAT.engaged, slider);
+  const counterSprocket = mesh(sprocketGeo(1.43, 14, 0.6), MAT.chain, counterShaft); counterSprocket.position.z = -6.6;
+  // tromol pemindah gigi dan garpu
+  const drumPos = V3(-8.2, -4.3, 0);
+  const shiftDrum = new THREE.Group(); shiftDrum.position.copy(drumPos); gearbox.add(shiftDrum);
+  zCyl(0.85, 8.0, MAT.steelDark, 0, 0, -1.3, shiftDrum, 24);
+  for (let i = 0; i < 4; i++) { const t = mesh(new THREE.TorusGeometry(0.86, 0.09, 6, 24), MAT.steel, shiftDrum); t.position.z = GZ[i] + 0.3; t.rotation.z = i; }
+  const fork = new THREE.Group(); gearbox.add(fork);
+  bar(V3(drumPos.x, drumPos.y, 0), V3(COUNTER.x + 0.2, COUNTER.y - 1.7, 0), 0.5, 0.25, MAT.brass, fork);
+  zCyl(0.25, 9.0, MAT.steel, -9.6, -3.0, -1.3, gearbox, 12);
+
+  /* ===== saluran masuk & karburator (dunia) ===== */
+  const intakePort = toWorld(-4.75, 16.4);
+  const carbAt = V3(9.6, 11.4, 0);
+  {
+    const path = new THREE.CatmullRomCurve3([intakePort, intakePort.clone().add(V3(-0.25, 1.4, 0)), V3(13.6, 11.0, 0), V3(11.6, 11.4, 0)]);
+    mesh(new THREE.TubeGeometry(path, 24, 1.05, 20, false), MAT.rubberH, engine);
+    for (const t of [0.12, 0.9]) { const p = path.getPointAt(t), tg = path.getTangentAt(t); const c = mesh(new THREE.TorusGeometry(1.12, 0.12, 6, 24), MAT.steel, engine); c.position.copy(p); c.quaternion.setFromUnitVectors(V3(0, 0, 1), tg); }
+    const body = mesh(new THREE.CylinderGeometry(1.35, 1.35, 3.6, 28), MAT.carbBody, engine); body.rotation.z = Math.PI / 2; body.position.copy(carbAt);
+    const tower = mesh(new THREE.CylinderGeometry(1.2, 1.3, 2.8, 28), MAT.carbBody, engine); tower.position.set(carbAt.x, carbAt.y + 2.0, 0);
+    mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.5, 6), MAT.carbBody, engine).position.set(carbAt.x, carbAt.y + 3.6, 0);
+    const bowl = mesh(new THREE.CylinderGeometry(1.45, 1.4, 1.8, 28), MAT.carbBody, engine); bowl.position.set(carbAt.x - 0.2, carbAt.y - 2.0, 0);
+    bolt(carbAt.x - 0.2, carbAt.y - 2.95, 0, '-y', engine, MAT.boltH, 0.7);
+    // tuas choke
+    const choke = new THREE.Group(); choke.position.set(carbAt.x - 1.2, carbAt.y + 0.5, 1.5); engine.add(choke);
+    box(0.25, 1.8, 0.3, MAT.black, 0, 0.8, 0, choke); box(0.8, 0.5, 0.4, MAT.red, 0, 1.7, 0, choke);
+    parts.chokeLever = choke;
+    // skep kuningan
+    const slide = new THREE.Group(); slide.position.set(carbAt.x, carbAt.y, 0); engine.add(slide);
+    mesh(new THREE.CylinderGeometry(0.85, 0.85, 2.4, 24), MAT.brass, slide).position.y = 0.4;
+    mesh(new THREE.CylinderGeometry(0.1, 0.04, 2.0, 8), MAT.steel, slide).position.y = -1.6;
+    parts.slide = slide;
+    // kabel gas
+    const cable = new THREE.CatmullRomCurve3([V3(carbAt.x, carbAt.y + 3.9, 0), V3(carbAt.x, carbAt.y + 6, 0), V3(carbAt.x - 2, carbAt.y + 8, -2), V3(carbAt.x - 6, carbAt.y + 8.5, -5)]);
+    mesh(new THREE.TubeGeometry(cable, 30, 0.2, 8, false), MAT.black, engine);
+    // corong dan selang ke saringan udara
+    const hose = new THREE.CatmullRomCurve3([V3(carbAt.x - 1.8, carbAt.y, 0), V3(carbAt.x - 3.4, carbAt.y + 0.3, 0), V3(4.9, 12.4, 0)]);
+    mesh(new THREE.TubeGeometry(hose, 16, 1.35, 20, false), MAT.rubberH, engine);
+    rbox(7.0, 4.4, 7.4, 1.0, MAT.black, 1.2, 12.9, -0.6, engine);
+    rbox(5.4, 0.3, 5.8, 0.12, MAT.accent, 1.2, 15.15, -0.6, engine);
+    for (const [x, z] of [[-1.6, -3.4], [4.0, -3.4], [-1.6, 2.2], [4.0, 2.2]]) bolt(x, 15.1, z, null, engine, MAT.steel, 0.55);
+  }
+  parts.carbBowl = V3(carbAt.x - 0.2, carbAt.y - 2.0, 0);
+
+  /* ===== knalpot (dunia): leher turun di depan, lewat bawah, peredam di kanan ===== */
+  const exPort = toWorld(4.85, 16.3);
+  const header = new THREE.CatmullRomCurve3([exPort, exPort.clone().add(V3(0.6, -2.6, 0)), V3(15.6, -7.8, 1.2), V3(9, -9.8, 3.4), V3(0, -10.2, 6.0), V3(-6.5, -9.6, 8.4), V3(-9.5, -9.0, 8.6)]);
+  mesh(new THREE.TubeGeometry(header, 90, 0.85, 18, false), MAT.exhaust, engine);
+  const MUF_START = -9.0, MUF_END = -33.5, MUF_Y0 = -9.0, MUF_Y1 = -6.0, MUF_Z = 8.6;
+  const mufAxis = V3(MUF_END - MUF_START, MUF_Y1 - MUF_Y0, 0).normalize();
+  const mufMid = V3((MUF_START + MUF_END) / 2, (MUF_Y0 + MUF_Y1) / 2, MUF_Z);
+  const mufLen = Math.hypot(MUF_END - MUF_START, MUF_Y1 - MUF_Y0);
+  {
+    const prof = [V2(0.001, -mufLen / 2 - 0.4), V2(0.9, -mufLen / 2 - 0.4), V2(2.1, -mufLen / 2 + 3.0), V2(2.25, -mufLen / 2 + 5), V2(2.25, mufLen / 2 - 3), V2(2.0, mufLen / 2 - 0.6), V2(1.4, mufLen / 2), V2(0.001, mufLen / 2)];
+    const muff = mesh(new THREE.LatheGeometry(prof, 40), MAT.exhaust, engine);
+    muff.position.copy(mufMid); muff.quaternion.setFromUnitVectors(Y_AXIS, mufAxis);
+    const shieldMat = housingMat({ color: 0xe9ebe8, metalness: 1, roughness: 0.16, alphaMap: perforation(6, 2), alphaTest: 0.5 }, 0);
+    const shield = mesh(new THREE.CylinderGeometry(2.6, 2.6, mufLen * 0.55, 40, 1, true, Math.PI * 0.1, Math.PI * 1.1), shieldMat, engine);
+    shield.position.copy(mufMid).addScaledVector(mufAxis, -mufLen * 0.12); shield.quaternion.setFromUnitVectors(Y_AXIS, mufAxis);
+    const tip = mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.6, 20), MAT.chromeH, engine);
+    tip.position.copy(mufMid).addScaledVector(mufAxis, mufLen / 2 + 0.6); tip.quaternion.setFromUnitVectors(Y_AXIS, mufAxis);
+    parts.tail = mufMid.clone().addScaledVector(mufAxis, mufLen / 2 + 1.6);
+    parts.tailDir = mufAxis.clone().negate().multiplyScalar(-1);
+    // braket peredam ke baut pivot
+    bar(V3(-13.6, 1.6, 5.2), mufMid.clone().addScaledVector(mufAxis, -2).add(V3(0, 2.0, 0)), 0.7, 0.35, MAT.steelDark, engine);
+    const fl = mesh(new THREE.TorusGeometry(1.0, 0.25, 8, 24), MAT.boltH, engine); fl.position.copy(exPort.clone().add(V3(0.15, -0.5, 0))); fl.rotation.x = Math.PI / 2;
+  }
+
+  engine.traverse((o) => { if (o.isMesh && o.material !== gasMat && o !== parts.oil) { o.castShadow = true; o.receiveShadow = true; } });
+
+  /* ===== update per frame ===== */
+  const STEP = Math.PI * 2;
+  let drumAng = 0, mainAng = 0, outAng = 0, shiftVis = 0, pedalKick = 0, lastGear = 0;
+  function update(st, dt) {
+    const th = st.phi, c = ((th % CYCLE) + CYCLE) % CYCLE;
+    const pinY = pinHeight(th) * 100;
+    crank.rotation.z = -th;
+    piston.position.set(0, pinY, 0);
+    const cx = CR * Math.sin(th), cy = CR * Math.cos(th);
+    rodG.position.set(cx, cy, 0); rodG.rotation.z = Math.atan2(cx, pinY - cy);
+    for (const v of valves) {
+      const lift = v.lift(c) * 100;
+      v.group.position.copy(v.seat).addScaledVector(v.dir, -lift);
+      v.spring.scale.set(1, Math.max(0.3, STEM - 0.45 - 2.35 - lift), 1);
+      v.lobe.rotation.z = v.camAng + v.peak / 2 - c / 2;
+      v.rocker.rotation.z = v.sign * (lift / v.lever);
+    }
+    camChain.update(-th * 1.5);
+    parts.slide.position.y = carbAt.y + st.throttle * 1.0;
+    parts.chokeLever.rotation.z = st.choke ? 0.6 : -0.2;
+
+    // gas di silinder
+    const crown = pinY + 2.2, top = 14.95;
+    gas.scale.y = Math.max(0.05, top - crown); gas.position.y = (crown + top) / 2;
+    const barP = st.p / 1e5, stroke = Math.floor(c / Math.PI);
+    if (stroke === 0) gasMat.color.setRGB(0.18, 0.42, 1.0).multiplyScalar(0.2 + 0.5 * (st.pMan / 101325));
+    else if (stroke === 1) { const k = clamp((barP - 1) / 18, 0, 1); gasMat.color.setRGB(0.25 + 0.45 * k, 0.4 - 0.1 * k, 1.0 - 0.3 * k).multiplyScalar(0.35 + 0.4 * k); }
+    else if (stroke === 2) {
+      if (st.burnQ > 0) { const k = clamp(barP / 45, 0, 1); gasMat.color.setRGB(1.0, 0.35 + 0.5 * k, 0.08 + 0.35 * k * k).multiplyScalar(0.25 + 0.85 * k); }
+      else gasMat.color.setRGB(0.3, 0.35, 0.6).multiplyScalar(0.3);
+    } else { const k = clamp((barP - 1) * 2, 0, 1); gasMat.color.setRGB(0.55, 0.45, 0.38).multiplyScalar(0.18 + 0.25 * k); }
+
+    // kopling & transmisi
+    drumAng += st.drum * dt; outAng += st.out * dt;
+    mainAng = drumAng / GEARBOX.primary;
+    drum.rotation.z = -drumAng;
+    shoeGroup.rotation.z = -th;
+    const fling = clamp((st.rpm - 1600) / 1400, 0, 1);
+    for (const s of shoes) s.position.x = 0.12 * fling - 0.05;
+    mainR.rotation.z = mainAng;
+    mainShaft.rotation.z = mainAng;
+    for (const p of pairs) { p.gc.rotation.z = -mainAng * (p.tm / p.tc); }
+    counterShaft.rotation.z = -outAng;
+    const g = st.shiftT > 0 ? 0 : st.gear;
+    const target = g > 0 ? GZ[g - 1] + 0.75 : -4.9;
+    shiftVis += (target - shiftVis) * (1 - Math.exp(-dt * 14));
+    slider.position.z = shiftVis;
+    fork.position.z = shiftVis;
+    const drumTarget = (st.shiftT > 0 ? st.pendingGear : st.gear) * (Math.PI * 2 / 5);
+    shiftDrum.rotation.z += (drumTarget - shiftDrum.rotation.z) * (1 - Math.exp(-dt * 12));
+    for (const p of pairs) { const on = g > 0 && p === pairs[g - 1]; p.mc.material = on ? MAT.engaged : MAT.gearSteel; p.mm.material = on ? MAT.engaged : MAT.gearSteel; }
+    const tg = st.shiftT > 0 ? st.pendingGear : st.gear;
+    if (tg !== lastGear) { pedalKick = tg > lastGear || (lastGear === 4 && tg === 0) ? 1 : -1; lastGear = tg; }
+    pedalKick *= Math.exp(-dt * 7);
+    parts.pedal.rotation.z = pedalKick * 0.28;
+  }
+
+  return {
+    group: engine, cyl, parts, tilt: TILT, gas, gasMat, clutch, gearbox, toWorld, update,
+    counter: COUNTER, counterSprocketZ: -6.6, carbBowl: parts.carbBowl,
+  };
+}
+
+return { buildEngine, TILT, MAIN, COUNTER };
+})();
+
+// ---- model/plug.js ----
+const __m_model_plug = (() => {
+// Busi, percikan listrik di celah elektroda, bunga api, dan inti nyala api yang merambat di ruang bakar.
+
+const { V2, V3, Y_AXIS, MAT, mesh, box, helixGeo, glowTex } = __m_kit;
+const { CYCLE, clamp } = __m_sim_engine;
+
+const PLUG_DIR = V3(-0.25, 0.3, -0.92).normalize();
+const PLUG_TIP = V3(0, 15.0, -1.25);
+const GAP_TOP = -0.3, GAP_BOT = -0.6;
+
+function buildPlug(cyl) {
+  const plug = new THREE.Group(); cyl.add(plug);
+  plug.position.copy(PLUG_TIP); plug.quaternion.setFromUnitVectors(Y_AXIS, PLUG_DIR);
+  const gapLocal = PLUG_TIP.clone().addScaledVector(PLUG_DIR, (GAP_TOP + GAP_BOT) / 2);
+  mesh(new THREE.CylinderGeometry(0.065, 0.075, 0.8, 14), MAT.nickel, plug).position.y = GAP_TOP + 0.4;
+  mesh(new THREE.CylinderGeometry(0.11, 0.26, 0.62, 24), MAT.porcelain, plug).position.y = 0.1;
+  box(0.15, 0.82, 0.26, MAT.nickel, 0.43, -0.31, 0, plug);
+  box(0.58, 0.14, 0.26, MAT.nickel, 0.16, GAP_BOT - 0.07, 0, plug);
+  mesh(new THREE.CylinderGeometry(0.43, 0.43, 3.6, 28), MAT.zinc, plug).position.y = 1.8;
+  mesh(helixGeo(15, 0.45, 0.06, 3.3), MAT.zinc, plug).position.y = 0.15;
+  const gk = mesh(new THREE.TorusGeometry(0.6, 0.1, 10, 36), MAT.zinc, plug); gk.rotation.x = Math.PI / 2; gk.position.y = 3.7;
+  mesh(new THREE.LatheGeometry([V2(0.001, 3.8), V2(0.86, 3.8), V2(0.92, 3.9), V2(0.92, 4.5), V2(0.84, 4.64), V2(0.001, 4.64)], 6), MAT.zinc, plug);
+  mesh(new THREE.LatheGeometry([V2(0.001, 4.64), V2(0.66, 4.64), V2(0.7, 4.72), V2(0.62, 4.86), V2(0.66, 4.98), V2(0.55, 5.06), V2(0.001, 5.06)], 36), MAT.zinc, plug);
+  const pts = [V2(0.001, 5.0), V2(0.56, 5.0), V2(0.53, 5.22)];
+  for (let i = 0; i < 5; i++) { const y = 5.3 + i * 0.34; pts.push(V2(0.46, y), V2(0.53, y + 0.08), V2(0.53, y + 0.17), V2(0.46, y + 0.25)); }
+  pts.push(V2(0.43, 7.1), V2(0.36, 7.42), V2(0.22, 7.62), V2(0.001, 7.62));
+  mesh(new THREE.LatheGeometry(pts, 48), MAT.porcelain, plug);
+  mesh(new THREE.CylinderGeometry(0.565, 0.565, 0.12, 40, 1, true), MAT.red, plug).position.y = 5.12;
+  mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.55, 14), MAT.nickel, plug).position.y = 7.85;
+  mesh(new THREE.LatheGeometry([V2(0.001, 8.05), V2(0.3, 8.05), V2(0.35, 8.16), V2(0.24, 8.3), V2(0.35, 8.44), V2(0.3, 8.58), V2(0.001, 8.58)], 28), MAT.nickel, plug);
+  mesh(new THREE.LatheGeometry([V2(0.001, 8.25), V2(0.66, 8.25), V2(0.72, 8.7), V2(0.7, 9.6), V2(0.56, 10.3), V2(0.38, 10.6), V2(0.001, 10.6)], 36), MAT.rubber, plug);
+  for (let i = 0; i < 3; i++) { const r = mesh(new THREE.TorusGeometry(0.72, 0.05, 6, 36), MAT.rubber, plug); r.rotation.x = Math.PI / 2; r.position.y = 8.85 + i * 0.3; }
+
+  const add = (color) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+  const coreMat = add(0xf2f8ff), glowMat = add(0x4f9bff);
+  const arcCore = new THREE.Mesh(new THREE.BufferGeometry(), coreMat), arcGlow = new THREE.Mesh(new THREE.BufferGeometry(), glowMat), arcFork = new THREE.Mesh(new THREE.BufferGeometry(), coreMat);
+  for (const m of [arcCore, arcGlow, arcFork]) { m.renderOrder = 4; m.frustumCulled = false; plug.add(m); }
+  function rebuildArc() {
+    const n = 8, p = [];
+    for (let i = 0; i <= n; i++) { const t = i / n, j = i === 0 || i === n ? 0 : Math.sin(t * Math.PI); p.push(V3((Math.random() - 0.5) * 0.16 * j, GAP_TOP + (GAP_BOT - GAP_TOP) * t, (Math.random() - 0.5) * 0.16 * j)); }
+    const curve = new THREE.CatmullRomCurve3(p, false, 'catmullrom', 0.05);
+    arcCore.geometry.dispose(); arcGlow.geometry.dispose(); arcFork.geometry.dispose();
+    arcCore.geometry = new THREE.TubeGeometry(curve, 24, 0.022, 5, false);
+    arcGlow.geometry = new THREE.TubeGeometry(curve, 24, 0.075, 8, false);
+    const k = 2 + Math.floor(Math.random() * 4), p0 = p[k];
+    const f1 = p0.clone().add(V3((Math.random() - 0.5) * 0.22, -0.06 - Math.random() * 0.08, (Math.random() - 0.5) * 0.22));
+    const f2 = f1.clone().add(V3((Math.random() - 0.5) * 0.14, -0.04, (Math.random() - 0.5) * 0.14));
+    arcFork.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([p0, f1, f2]), 8, 0.012, 4, false);
+  }
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0x9fd0ff, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0 }));
+  halo.scale.set(1.3, 1.3, 1); halo.position.set(0, (GAP_TOP + GAP_BOT) / 2, 0); halo.renderOrder = 4; plug.add(halo);
+  const sparkLight = new THREE.PointLight(0xa9d2ff, 0, 7, 2); sparkLight.position.copy(halo.position); plug.add(sparkLight);
+
+  const EMB = 28, embGeo = new THREE.BufferGeometry();
+  embGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(EMB * 3), 3));
+  const embers = new THREE.Points(embGeo, new THREE.PointsMaterial({ color: 0xffe6a8, size: 0.09, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  embers.frustumCulled = false; embers.renderOrder = 4; plug.add(embers);
+  const embVel = new Float32Array(EMB * 3); let embLife = 1;
+  function burst() {
+    const p = embGeo.attributes.position.array;
+    for (let i = 0; i < EMB; i++) {
+      p[i * 3] = (Math.random() - 0.5) * 0.08; p[i * 3 + 1] = GAP_TOP + (GAP_BOT - GAP_TOP) * Math.random(); p[i * 3 + 2] = (Math.random() - 0.5) * 0.08;
+      const a = Math.random() * Math.PI * 2, sp = 1.2 + Math.random() * 2.6;
+      embVel[i * 3] = Math.cos(a) * sp; embVel[i * 3 + 1] = -0.4 - Math.random() * 1.6; embVel[i * 3 + 2] = Math.sin(a) * sp;
+    }
+    embGeo.attributes.position.needsUpdate = true; embLife = 0;
+  }
+
+  // inti nyala api
+  const kGeo = new THREE.SphereGeometry(1, 28, 20);
+  { const p = kGeo.attributes.position; for (let i = 0; i < p.count; i++) { const v = V3(p.getX(i), p.getY(i), p.getZ(i)); v.multiplyScalar(0.92 + 0.08 * Math.sin(v.x * 5.1 + 1.3) * Math.cos(v.y * 4.3 + v.z * 3.1)); p.setXYZ(i, v.x, v.y, v.z); } kGeo.computeVertexNormals(); }
+  const kernelMat = new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const kernel = new THREE.Mesh(kGeo, kernelMat); kernel.renderOrder = 3; cyl.add(kernel);
+  const coreK = new THREE.Mesh(kGeo, new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  coreK.renderOrder = 3; cyl.add(coreK);
+  const CHAMBER = V3(0, 14.55, 0);
+  const flameLight = new THREE.PointLight(0xffa35a, 0, 18, 1.6); flameLight.position.set(0, 14.6, 0.4); cyl.add(flameLight);
+
+  let flash = 0, prev = 0, tick = 0;
+  function update(st, dt, slow) {
+    const c = ((st.phi % CYCLE) + CYCLE) % CYCLE;
+    const ignC = Math.PI * 2 - (st.advance * Math.PI) / 180;
+    const since = c - ignC, win = (16 * Math.PI) / 180;
+    let k = st.fuel && st.events !== undefined && st.burnQ > 0 && since >= 0 && since < win ? 1 - (since / win) * 0.55 : 0;
+    k = Math.max(k, flash);
+    flash = Math.max(0, flash - dt * (slow ? 3 : 18));
+    if (k > 0.03) {
+      if (prev <= 0.03) burst();
+      if (!slow || tick++ % 3 === 0) rebuildArc();
+      const fl = 0.75 + Math.random() * 0.25;
+      coreMat.opacity = k * fl; glowMat.opacity = k * 0.55 * fl; halo.material.opacity = k * 0.9; sparkLight.intensity = k * 22;
+    } else { coreMat.opacity = glowMat.opacity = 0; halo.material.opacity = 0; sparkLight.intensity = 0; }
+    prev = k;
+    if (embLife < 1) {
+      embLife += (dt * (slow ? 0.3 : 1)) / 0.35;
+      const p = embGeo.attributes.position.array, d = dt * (slow ? 0.3 : 1);
+      for (let i = 0; i < EMB * 3; i++) { p[i] += embVel[i] * d * 0.35; embVel[i] *= 1 - d * 4; }
+      embGeo.attributes.position.needsUpdate = true;
+      embers.material.opacity = Math.max(0, 1 - embLife);
+    } else embers.material.opacity = 0;
+    const xb = st.burnQ > 0 && c > ignC && c < Math.PI * 2.5 ? st.xb : 0;
+    if (xb > 0.0005 || (st.burnQ > 0 && since > 0.02 && since < 0.5)) {
+      const grow = Math.max(0.12, Math.pow(xb, 0.45)), r = 0.18 + 2.35 * grow;
+      kernel.position.copy(gapLocal).lerp(CHAMBER, Math.min(1, grow * 0.75));
+      kernel.scale.setScalar(r); coreK.position.copy(kernel.position); coreK.scale.setScalar(r * 0.55);
+      kernel.rotation.z += 0.07; kernel.rotation.y += 0.05; coreK.rotation.copy(kernel.rotation);
+      kernel.scale.y = r * 0.8; coreK.scale.y = r * 0.45;
+      const fade = Math.pow(1 - xb, 0.8); kernelMat.opacity = 0.42 * fade; coreK.material.opacity = 0.32 * fade * fade;
+    } else { kernelMat.opacity = 0; coreK.material.opacity = 0; }
+    const bar = st.p / 1e5, stroke = Math.floor(c / Math.PI);
+    flameLight.intensity = st.burnQ > 0 && (stroke === 2 || (stroke === 1 && st.xb > 0.01)) ? clamp(bar / 40, 0, 1) * 120 : 0;
+  }
+  return {
+    group: plug, gapLocal, update, spark() { flash = 1; },
+    setVisible(v) { kernel.visible = coreK.visible = v; flameLight.visible = v; sparkLight.visible = v; },
+    clipMats: [kernelMat, coreK.material],
+  };
+}
+
+return { buildPlug, PLUG_DIR, PLUG_TIP };
+})();
+
+// ---- model/bench3d.js ----
+const __m_model_bench3d = (() => {
+// Perlengkapan meja uji: rangka dudukan, dinamo arus eddy berantai, kipas pendingin, tangki bensin, koil.
+
+const { V2, V3, MAT, mesh, box, rbox, zCyl, bar, rod, sprocketGeo, chainLoop, canvasTex } = __m_kit;
+
+const FLOOR_Y = -15;
+const DYNO = V3(-38, -0.5, 0);
+
+function buildBench(root, eng) {
+  const g = new THREE.Group(); root.add(g);
+
+  // lantai: pelat besi dengan alur T
+  const floor = rbox(110, 1.2, 60, 0.3, MAT.floor, -6, FLOOR_Y - 0.6, 0, g);
+  floor.receiveShadow = true;
+  for (let z = -24; z <= 24; z += 8) box(108, 0.06, 0.9, MAT.black, -6, FLOOR_Y + 0.01, z, g);
+
+  // rangka dudukan mesin di sisi kiri (z = -12,5): dua tiang, rel dasar, penguat diagonal
+  const T = 1.3, ZS = -12.5;
+  box(T, 6.2 - FLOOR_Y + 1.2, T, MAT.frame, -2.4, (FLOOR_Y + 6.2) / 2 + 0.6, ZS, g);
+  box(T, 1.6 - FLOOR_Y + 1.2, T, MAT.frame, -13.6, (FLOOR_Y + 1.6) / 2 + 0.6, ZS, g);
+    bar(V3(-13.6, 1.6, ZS), V3(-2.4, 6.2, ZS), T, T, MAT.frame, g);
+  bar(V3(-13.6, -8, ZS), V3(-2.4, -1, ZS), T * 0.8, T * 0.8, MAT.frame, g);
+  for (const x of [-2.4, -13.6]) {
+    box(T, T, 20, MAT.frame, x, FLOOR_Y + 0.65, ZS + 10 - T / 2, g);
+    bar(V3(x, FLOOR_Y + 1.2, ZS + 8), V3(x, x === -2.4 ? 2 : -2, ZS + 0.6), T * 0.7, T * 0.7, MAT.frame, g);
+  }
+  box(14, T, T, MAT.frame, -8, FLOOR_Y + 0.65, ZS, g);
+  for (const [x, y] of [[-2.4, 6.2], [-13.6, 1.6]]) {
+    rbox(3.0, 3.0, 0.6, 0.2, MAT.steelDark, x, y, ZS + 0.95, g);
+    const nut = mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.6, 6).rotateX(Math.PI / 2), MAT.steel, g); nut.position.set(x, y, ZS - 0.95);
+    const nut2 = mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.6, 6).rotateX(Math.PI / 2), MAT.steel, g); nut2.position.set(x, y, 5.1);
+  }
+  for (const [x, z] of [[-2.4, ZS], [-13.6, ZS], [-2.4, ZS + 19], [-13.6, ZS + 19]]) box(3.0, 0.3, 3.0, MAT.steelDark, x, FLOOR_Y + 0.15, z, g);
+
+  // dinamo arus eddy di belakang
+  const dyno = new THREE.Group(); dyno.position.copy(DYNO); g.add(dyno);
+  const body = mesh(new THREE.CylinderGeometry(7.4, 7.4, 9.0, 64).rotateX(Math.PI / 2), MAT.dyno, dyno); body.position.z = 1.0;
+  for (let i = 0; i < 9; i++) { const f = mesh(new THREE.TorusGeometry(7.45, 0.18, 6, 64), MAT.dyno, dyno); f.position.z = -2.8 + i * 0.95; }
+  rbox(13, 1.4, 12, 0.3, MAT.dyno, 0, -7.6, 1.0, dyno);
+  for (const x of [-5, 5]) box(1.6, 6.6, 9, MAT.dyno, x, -11.6, 1.0, dyno);
+  // lengan torsi dan sel beban
+  bar(V3(0, 7.4, 1), V3(9.5, 7.4, 1), 1.0, 1.0, MAT.steelDark, dyno);
+  box(1.4, 2.0, 1.4, MAT.accent, 9.5, 5.8, 1, dyno);
+  rod(V3(9.5, 4.8, 1), V3(9.5, -10.8, 1), 0.25, MAT.steel, dyno);
+  // rotor berventilasi yang terlihat di depan
+  const rotor = new THREE.Group(); rotor.position.z = 5.9; dyno.add(rotor);
+  zCyl(6.4, 0.5, MAT.gearSteel, 0, 0, 0, rotor, 72);
+  for (let i = 0; i < 18; i++) { const a = (i / 18) * Math.PI * 2; const v = box(2.4, 0.5, 0.56, MAT.black, Math.cos(a) * 4.5, Math.sin(a) * 4.5, 0.02, rotor); v.rotation.z = a; }
+  zCyl(1.6, 0.9, MAT.steel, 0, 0, 0.3, rotor, 32);
+  const label = new THREE.Mesh(new THREE.PlaneGeometry(9, 1.5), new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.3 }));
+  label.position.set(0, 4.6, 5.52); dyno.add(label);
+  label.material.map = canvasTex(720, 120, (x) => {
+    x.fillStyle = '#16231d'; x.fillRect(0, 0, 720, 120); x.strokeStyle = '#e2a20c'; x.lineWidth = 6; x.strokeRect(6, 6, 708, 108);
+    x.fillStyle = '#e8c45a'; x.font = '800 54px "Big Shoulders Display", "Arial Narrow", sans-serif'; x.textBaseline = 'middle'; x.fillText('DINAMO ARUS EDDY', 30, 62);
+    x.fillStyle = '#c9d2cc'; x.font = '500 26px monospace'; x.textAlign = 'right'; x.fillText('400 N·m', 690, 62);
+  });
+  // poros, gir belakang 37T, rantai dari gir depan 14T
+  zCyl(0.9, 10, MAT.steel, 0, 0, -3.6, dyno, 24);
+  const sp = mesh(sprocketGeo(3.74, 37, 0.6), MAT.chain, dyno); sp.position.z = eng.counterSprocketZ;
+  const rearHub = zCyl(1.4, 1.2, MAT.steelDark, 0, 0, eng.counterSprocketZ + 0.9, dyno, 24);
+  const drive = chainLoop(V2(eng.counter.x, eng.counter.y), 1.6, V2(DYNO.x, DYNO.y), 3.9, eng.counterSprocketZ, g, 1.27, 0.6);
+
+  // kipas pendingin di depan
+  const fan = new THREE.Group(); fan.position.set(36, -1.5, 0); fan.rotation.y = -Math.PI / 2; g.add(fan);
+  const blades = new THREE.Group(); fan.add(blades);
+  for (let i = 0; i < 5; i++) {
+    const s = new THREE.Shape(); s.moveTo(0.6, -0.8); s.quadraticCurveTo(5, -2.6, 7.6, -0.6); s.quadraticCurveTo(6.6, 1.9, 0.6, 0.8); s.closePath();
+    const bg = new THREE.ExtrudeGeometry(s, { depth: 0.12, bevelEnabled: false, curveSegments: 10 });
+    const b = mesh(bg, new THREE.MeshStandardMaterial({ color: 0x2b6a8a, metalness: 0.2, roughness: 0.4, side: THREE.DoubleSide }), blades);
+    b.rotation.set(0.35, 0, (i / 5) * Math.PI * 2);
+  }
+  zCyl(1.3, 1.6, MAT.black, 0, 0, -0.3, blades, 24);
+  zCyl(2.4, 5.0, MAT.black, 0, 0, -3.6, fan, 32);
+  const ringMat = MAT.chrome;
+  for (const [r, z] of [[8.6, 1.2], [8.6, -1.4], [6.0, 1.4], [3.4, 1.45]]) mesh(new THREE.TorusGeometry(r, 0.08, 6, 64), ringMat, fan).position.z = z;
+  for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2; rod(V3(Math.cos(a) * 1.2, Math.sin(a) * 1.2, 1.5), V3(Math.cos(a) * 8.6, Math.sin(a) * 8.6, 1.2), 0.05, ringMat, fan, 4); }
+  mesh(new THREE.TorusGeometry(8.6, 0.25, 8, 64), MAT.black, fan).position.z = 0.1;
+  rod(V3(39.6, -3.8, 0), V3(39.6, FLOOR_Y + 0.6, 0), 0.7, MAT.black, g);
+  const fanBase = mesh(new THREE.CylinderGeometry(4.5, 5.0, 0.8, 40), MAT.black, g); fanBase.position.set(39.6, FLOOR_Y + 0.4, 0);
+
+  // tangki bensin uji dan selang bening ke karbu
+  const tank = new THREE.Group(); tank.position.set(-6, 22, -2); g.add(tank);
+  rbox(10, 5.6, 7, 1.4, MAT.red, 0, 0, 0, tank);
+  zCyl(1.1, 0.8, MAT.chrome, 2.4, 2.9, 0, tank, 24).rotation.x = 0;
+  const capm = mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.8, 24), MAT.chrome, tank); capm.position.set(2.4, 3.0, 0);
+  mesh(new THREE.CylinderGeometry(0.35, 0.35, 4.6, 12), new THREE.MeshPhysicalMaterial({ color: 0xffffff, transmission: 0.9, roughness: 0.05, transparent: true, opacity: 0.4 }), tank).position.set(-4.0, 0, 3.55);
+  box(0.6, 3.0, 0.4, MAT.fuel, -4.0, -0.7, 3.55, tank);
+  box(1.2, 1.4, 1.2, MAT.chrome, -2.6, -3.4, 0, tank);
+  rod(V3(-6, 19, -2), V3(-6, 11.5, -2), 0.5, MAT.frame, g);
+  rod(V3(-6, 11.5, -2), V3(-2.4, 7.0, -2), 0.5, MAT.frame, g);
+  const hp = new THREE.CatmullRomCurve3([V3(-8.6, 17.8, -2), V3(-8.4, 14.6, -5.8), V3(1, 9.4, -6.2), V3(6.8, 8.0, -3.4), V3(eng.carbBowl.x - 1.3, eng.carbBowl.y, -0.6)]);
+  mesh(new THREE.TubeGeometry(hp, 60, 0.32, 10, false), MAT.hose, g);
+  mesh(new THREE.TubeGeometry(hp, 60, 0.16, 6, false), MAT.fuel, g);
+
+  // koil pengapian dan kabel busi
+  const coil = new THREE.Group(); coil.position.set(-2.4, 1.0, -10.6); g.add(coil);
+  rbox(2.6, 5.0, 2.6, 0.5, MAT.black, 0, 0, 0, coil);
+  zCyl(0.6, 1.2, MAT.black, 0, 2.4, 1.0, coil, 16);
+  box(0.4, 3.2, 1.6, MAT.steelDark, 0, 0, -1.5, coil);
+  const boot = eng.plugBootWorld;
+  const lead = new THREE.CatmullRomCurve3([V3(-2.4, 3.4, -9.6), V3(1, 7, -11), V3(boot.x - 2, boot.y + 1.5, boot.z - 3), boot]);
+  mesh(new THREE.TubeGeometry(lead, 40, 0.24, 8, false), MAT.rubber, g);
+
+  // plat nama di lantai depan
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(26, 2.2), new THREE.MeshStandardMaterial({ metalness: 0.6, roughness: 0.35 }));
+  plate.rotation.x = -Math.PI / 2; plate.position.set(4, FLOOR_Y + 0.03, 21); g.add(plate);
+  const drawPlate = (x) => {
+    x.fillStyle = '#1b2620'; x.fillRect(0, 0, 1600, 136); x.strokeStyle = '#d99a06'; x.lineWidth = 6; x.strokeRect(8, 8, 1584, 120);
+    x.fillStyle = '#e8b52a'; x.font = '800 66px "Big Shoulders Display", "Arial Narrow", sans-serif'; x.textBaseline = 'middle';
+    x.fillText('MEJA UJI · MESIN BEBEK 109,1 CC', 44, 70);
+    x.font = '500 30px monospace'; x.textAlign = 'right'; x.fillStyle = '#c9d2cc'; x.fillText('4-TAK · SOHC · 4 PERCEPATAN', 1556, 70);
+  };
+  plate.material.map = canvasTex(1600, 136, drawPlate);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { plate.material.map = canvasTex(1600, 136, drawPlate); plate.material.needsUpdate = true; });
+
+  g.traverse((o) => { if (o.isMesh && o.material !== MAT.hose) { o.castShadow = true; o.receiveShadow = true; } });
+
+  let rotAng = 0, fanAng = 0;
+  return {
+    group: g,
+    update(st, dt) {
+      rotAng += st.out * dt;
+      rotor.rotation.z = -rotAng; sp.rotation.z = -rotAng; rearHub.rotation.z = -rotAng;
+      drive.update(rotAng * 1.43 * -1);
+      fanAng += dt * 24; blades.rotation.z = fanAng;
+    },
+  };
+}
+
+return { buildBench, FLOOR_Y, DYNO };
+})();
+
+// ---- audio.js ----
+const __m_audio = (() => {
+// Suara disintesis Web Audio. Dentuman knalpot dijadwalkan dari saat klep buang membuka di simulasi,
+// lalu dilewatkan ke resonator pipa knalpot dan peredam. Ketukan klep, starter, kipas, dan dengung dinamo ikut.
+const { clamp } = __m_sim_engine;
+
+function createAudio() {
+  const A = { ctx: null, on: false };
+  function init() {
+    if (A.ctx) return true;
+    const C = window.AudioContext || window.webkitAudioContext;
+    if (!C) return false;
+    const ctx = new C();
+    const sr = ctx.sampleRate;
+    const noise = ctx.createBuffer(1, sr * 2, sr);
+    const d = noise.getChannelData(0); let b = 0;
+    for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; b = 0.97 * b + 0.03 * w; d[i] = w * 0.6 + b * 4; }
+    const master = ctx.createGain(); master.gain.value = 0;
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 5; comp.attack.value = 0.002; comp.release.value = 0.12;
+    master.connect(comp).connect(ctx.destination);
+    // resonator pipa: umpan balik tertunda ≈ 2L/c
+    const pipeIn = ctx.createGain();
+    const pipeDelay = ctx.createDelay(0.05); pipeDelay.delayTime.value = 0.0052;
+    const pipeFb = ctx.createGain(); pipeFb.gain.value = 0.5;
+    const pipeLp = ctx.createBiquadFilter(); pipeLp.type = 'lowpass'; pipeLp.frequency.value = 2600;
+    pipeIn.connect(pipeDelay); pipeDelay.connect(pipeLp).connect(pipeFb).connect(pipeDelay);
+    const muffler = ctx.createBiquadFilter(); muffler.type = 'lowpass'; muffler.frequency.value = 1700; muffler.Q.value = 0.8;
+    const body = ctx.createBiquadFilter(); body.type = 'peaking'; body.frequency.value = 115; body.gain.value = 7; body.Q.value = 1.2;
+    pipeIn.connect(muffler); pipeLp.connect(muffler);
+    muffler.connect(body).connect(master);
+    const loop = (type, f, q, g, dest = master) => {
+      const src = ctx.createBufferSource(); src.buffer = noise; src.loop = true;
+      const fl = ctx.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q;
+      const gn = ctx.createGain(); gn.gain.value = g;
+      src.connect(fl).connect(gn).connect(dest); src.start(); return { fl, gn };
+    };
+    const intake = loop('bandpass', 700, 1.6, 0);
+    const mech = loop('bandpass', 4200, 0.9, 0);
+    const fan = loop('lowpass', 900, 0.5, 0.012);
+    const osc = (type, f, g) => { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; const gn = ctx.createGain(); gn.gain.value = g; o.connect(gn); o.start(); return { o, gn }; };
+    const starter = osc('sawtooth', 220, 0); const stf = ctx.createBiquadFilter(); stf.type = 'lowpass'; stf.frequency.value = 1300; starter.gn.connect(stf).connect(master);
+    const whine = osc('triangle', 600, 0); whine.gn.connect(master);
+    const dyno = osc('sine', 80, 0); dyno.gn.connect(master);
+    Object.assign(A, { ctx, noise, master, pipeIn, pipeDelay, pipeFb, muffler, intake, mech, fan, starter, whine, dyno });
+    return true;
+  }
+  function burst(t, amp, dur, freq, q, dest, offset = 0) {
+    const { ctx, noise } = A;
+    const src = ctx.createBufferSource(); src.buffer = noise;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(amp, 0.0002), t + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f).connect(g).connect(dest); src.start(t, offset || Math.random() * 1.5, dur + 0.03);
+  }
+  function exhaustPulse(t, amp, st) {
+    const { ctx, pipeIn } = A, rpm = Math.max(st.rpm, 250);
+    const dur = clamp(0.014 + 7 / rpm, 0.02, 0.085);
+    burst(t, amp, dur, 260 + 900 * st.throttle + rpm * 0.08, 0.7, pipeIn);
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(135, t); o.frequency.exponentialRampToValueAtTime(52, t + dur);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, t); og.gain.exponentialRampToValueAtTime(amp * 1.15, t + 0.003); og.gain.exponentialRampToValueAtTime(0.0001, t + dur * 1.3);
+    o.connect(og).connect(pipeIn); o.start(t); o.stop(t + dur * 1.3 + 0.02);
+  }
+  return {
+    get on() { return A.on; },
+    get ready() { return !!A.ctx; },
+    wanted: undefined,
+    set(on) {
+      if (on && !init()) on = false;
+      A.on = on;
+      if (A.ctx) { if (on && A.ctx.state === 'suspended') A.ctx.resume(); A.master.gain.setTargetAtTime(on ? 0.75 : 0, A.ctx.currentTime, 0.05); }
+      return on;
+    },
+    now() { return A.ctx && A.on ? A.ctx.currentTime + 0.05 : 0; },
+    event(ev, at, st) {
+      if (!at) return;
+      if (ev.type === 'exhaust') exhaustPulse(at, ev.lit ? clamp(0.22 + ev.k * 0.55, 0.05, 0.9) * (0.5 + 0.5 * st.throttle) : 0.035, st);
+      else if (ev.type === 'valve') burst(at, 0.012 + 0.012 * clamp(st.rpm / 6000, 0, 1), 0.012, ev.which === 'in' ? 3600 : 4300, 6, A.master);
+      else if (ev.type === 'afterfire') { burst(at, 0.9, 0.05, 900, 0.5, A.pipeIn); burst(at + 0.006, 0.5, 0.08, 300, 0.6, A.pipeIn); }
+      else if (ev.type === 'shift') { burst(at, 0.08, 0.05, 1800, 3, A.master); burst(at + 0.09, 0.12, 0.04, 900, 4, A.master); }
+    },
+    update(st, scale) {
+      if (!A.ctx || !A.on) return;
+      const t = A.ctx.currentTime, rpm = st.rpm;
+      const run = st.rpm > 80 ? 1 : 0;
+      A.intake.gn.gain.setTargetAtTime(run * clamp(st.airKgs * 7, 0, 0.06), t, 0.05);
+      A.intake.fl.frequency.setTargetAtTime(420 + rpm * 0.11, t, 0.05);
+      A.mech.gn.gain.setTargetAtTime(clamp(rpm / 9000, 0, 1) * 0.018 * (scale < 1 ? 0.3 : 1), t, 0.05);
+      A.mech.fl.frequency.setTargetAtTime(3200 + rpm * 0.2, t, 0.1);
+      A.starter.gn.gain.setTargetAtTime(st.starter ? 0.05 : 0, t, 0.02);
+      A.starter.o.frequency.setTargetAtTime(150 + rpm * 0.55, t, 0.03);
+      // dengung rantai keteng & gigi transmisi
+      A.whine.gn.gain.setTargetAtTime(clamp(rpm / 9000, 0, 1) * 0.006 + (st.gear > 0 ? clamp(st.out / 200, 0, 1) * 0.006 : 0), t, 0.1);
+      A.whine.o.frequency.setTargetAtTime(Math.max(40, (rpm / 60) * 14 * 0.5), t, 0.05);
+      A.dyno.gn.gain.setTargetAtTime(clamp(st.out / 150, 0, 1) * (0.004 + 0.02 * st.load), t, 0.1);
+      A.dyno.o.frequency.setTargetAtTime(Math.max(30, (st.out / (2 * Math.PI)) * 18), t, 0.05);
+      A.pipeDelay.delayTime.setTargetAtTime(clamp(0.0062 - st.headC * 0.000006, 0.004, 0.0062), t, 0.5);
+      A.muffler.frequency.setTargetAtTime(1300 + 1400 * st.throttle, t, 0.08);
+    },
+  };
+}
+
+return { createAudio };
+})();
+
+// ---- ui/instruments.js ----
+const __m_ui_instruments = (() => {
+// Takometer, roda siklus 720°, dan diagram P–V, digambar di canvas 2D dengan warna dari token tema.
+const { SPEC, VD, CYCLE, clamp, TIMING } = __m_sim_engine;
+
+const MONO = '500 10px "Martian Mono", ui-monospace, monospace';
+function fit(cv) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2), w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const x = cv.getContext('2d'); x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return [x, w, h];
+}
+
+function drawTach(cv, T, rpm, st) {
+  const [x, w, h] = fit(cv); x.clearRect(0, 0, w, h);
+  const cx = w / 2, cy = h * 0.5, R = Math.min(w * 0.42, h * 0.46);
+  const a0 = Math.PI * 0.75, sweep = Math.PI * 1.5, max = 10000, ang = (v) => a0 + (v / max) * sweep;
+  x.lineCap = 'butt';
+  x.lineWidth = 6; x.strokeStyle = T.line; x.beginPath(); x.arc(cx, cy, R, a0, a0 + sweep); x.stroke();
+  x.strokeStyle = T.hot; x.beginPath(); x.arc(cx, cy, R, ang(SPEC.limiter - 100), ang(max)); x.stroke();
+  x.strokeStyle = T.accent; x.beginPath(); x.arc(cx, cy, R, a0, ang(clamp(rpm, 0, max))); x.stroke();
+  x.font = MONO; x.textAlign = 'center'; x.textBaseline = 'middle';
+  for (let v = 0; v <= max; v += 500) {
+    const a = ang(v), major = v % 1000 === 0;
+    x.strokeStyle = v >= 9500 ? T.hot : T.ink; x.lineWidth = major ? 1.6 : 1;
+    x.beginPath(); x.moveTo(cx + Math.cos(a) * (R - 8), cy + Math.sin(a) * (R - 8)); x.lineTo(cx + Math.cos(a) * (R - (major ? 16 : 12)), cy + Math.sin(a) * (R - (major ? 16 : 12))); x.stroke();
+    if (major) { x.fillStyle = T.muted; x.fillText(String(v / 1000), cx + Math.cos(a) * (R - 25), cy + Math.sin(a) * (R - 25)); }
+  }
+  const a = ang(clamp(rpm, 0, max * 1.02));
+  x.strokeStyle = T.hot; x.lineWidth = 2.2;
+  x.beginPath(); x.moveTo(cx - Math.cos(a) * 8, cy - Math.sin(a) * 8); x.lineTo(cx + Math.cos(a) * (R - 6), cy + Math.sin(a) * (R - 6)); x.stroke();
+  x.fillStyle = T.ink; x.beginPath(); x.arc(cx, cy, 4, 0, Math.PI * 2); x.fill();
+  x.fillStyle = T.muted; x.fillText('×1000', cx, cy + R * 0.5); x.fillText('rpm', cx, cy + R * 0.5 + 12);
+  // indikator gigi di tengah atas
+  x.font = '800 18px "Big Shoulders Display", "Arial Narrow", sans-serif'; x.fillStyle = st.gear === 0 ? '#2fa35a' : T.ink;
+  x.fillText(st.shiftT > 0 ? '·' : st.gear === 0 ? 'N' : String(st.gear), cx, cy - R * 0.42);
+}
+
+function drawCycle(cv, T, st) {
+  const [x, w, h] = fit(cv); x.clearRect(0, 0, w, h);
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) * 0.36;
+  const toA = (deg) => -Math.PI / 2 + (deg / 720) * Math.PI * 2;
+  const names = ['HISAP', 'KOMPRESI', 'USAHA', 'BUANG'], letters = ['H', 'K', 'U', 'B'];
+  const colors = [T.intake, T.accent, T.hot, T.exhaust];
+  const c = ((st.phi % CYCLE) + CYCLE) % CYCLE, deg = (c * 180) / Math.PI, cur = Math.floor(c / Math.PI);
+  x.lineCap = 'butt';
+  for (let i = 0; i < 4; i++) {
+    x.lineWidth = i === cur ? 10 : 6; x.strokeStyle = i === cur ? colors[i] : T.line;
+    x.beginPath(); x.arc(cx, cy, R, toA(i * 180) + 0.04, toA((i + 1) * 180) - 0.04); x.stroke();
+    const mid = toA(i * 180 + 90);
+    x.font = (i === cur ? '600 ' : '500 ') + '10px "Martian Mono", ui-monospace, monospace';
+    x.fillStyle = i === cur ? T.ink : T.muted; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(letters[i], cx + Math.cos(mid) * (R + 15), cy + Math.sin(mid) * (R + 15));
+  }
+  x.lineWidth = 2.5;
+  x.strokeStyle = T.intake; x.beginPath(); x.arc(cx, cy, R - 10, toA(TIMING.ivo), toA(TIMING.ivc)); x.stroke();
+  x.strokeStyle = T.exhaust; x.beginPath(); x.arc(cx, cy, R - 15, toA(TIMING.evo), toA(TIMING.evc)); x.stroke();
+  const ig = toA(360 - st.advance);
+  x.fillStyle = T.hot; x.beginPath(); x.arc(cx + Math.cos(ig) * (R + 9), cy + Math.sin(ig) * (R + 9), 2.6, 0, Math.PI * 2); x.fill();
+  const a = toA(deg), px = cx + Math.cos(a) * R, py = cy + Math.sin(a) * R;
+  x.fillStyle = T.panel; x.strokeStyle = T.ink; x.lineWidth = 2;
+  x.beginPath(); x.arc(px, py, 5.5, 0, Math.PI * 2); x.fill(); x.stroke();
+  x.fillStyle = T.ink; x.textAlign = 'center'; x.textBaseline = 'alphabetic';
+  x.font = '800 ' + Math.max(11, Math.min(16, R * 0.27)) + 'px "Big Shoulders Display", "Arial Narrow", sans-serif';
+  x.fillText(names[cur], cx, cy + 2);
+  x.font = '500 9.5px "Martian Mono", ui-monospace, monospace'; x.fillStyle = T.muted; x.textBaseline = 'top';
+  x.fillText(Math.floor(deg) + '°', cx, cy + 6);
+}
+
+function drawPV(cv, T, st) {
+  const [x, w, h] = fit(cv); x.clearRect(0, 0, w, h);
+  const ml = 34, mr = 10, mt = 10, mb = 24, pw = w - ml - mr, ph = h - mt - mb;
+  const vx = (v) => ml + (v / 1.15) * pw;
+  const lp0 = Math.log(0.1), lp1 = Math.log(80);
+  const py = (p) => mt + ph - ((Math.log(clamp(p, 0.1, 80)) - lp0) / (lp1 - lp0)) * ph;
+  x.font = MONO; x.fillStyle = T.muted; x.textAlign = 'right'; x.textBaseline = 'middle'; x.lineWidth = 1;
+  for (const p of [0.2, 0.5, 1, 2, 5, 10, 20, 50]) {
+    x.strokeStyle = T.line; x.beginPath(); x.moveTo(ml, py(p)); x.lineTo(ml + pw, py(p)); x.stroke();
+    x.fillText(String(p).replace('.', ','), ml - 5, py(p));
+  }
+  x.textAlign = 'center'; x.textBaseline = 'top';
+  x.fillText('TMA', vx(1 / (SPEC.cr - 1)), mt + ph + 6);
+  x.fillText('TMB', vx(SPEC.cr / (SPEC.cr - 1)), mt + ph + 6);
+  x.save(); x.translate(10, mt + ph / 2); x.rotate(-Math.PI / 2); x.textBaseline = 'middle'; x.fillText('bar', 0, 0); x.restore();
+  const draw = (arr, color, width) => {
+    if (arr.length < 4) return;
+    x.strokeStyle = color; x.lineWidth = width; x.beginPath();
+    for (let i = 0; i < arr.length; i += 2) { const X = vx(arr[i]), Y = py(arr[i + 1]); i === 0 ? x.moveTo(X, Y) : x.lineTo(X, Y); }
+    x.stroke();
+  };
+  draw(st.pvLast, T.hot, 1.6); draw(st.pv, T.accent, 1.4);
+  if (st.pv.length >= 2) { const i = st.pv.length - 2; x.fillStyle = T.ink; x.beginPath(); x.arc(vx(st.pv[i]), py(st.pv[i + 1]), 3.2, 0, Math.PI * 2); x.fill(); }
+}
+
+return { drawTach, drawCycle, drawPV };
+})();
+
+// ---- main.js ----
+const __m_main = (() => {
+
+
+
+const { V3, MAT, cutPlane, sectioned, glowTex } = __m_kit;
+const { STROKES, strokeIndex, clamp, SPEC } = __m_sim_engine;
+const { createBench, GEARBOX } = __m_sim_bench;
+const { buildEngine } = __m_model_engine3d;
+const { buildPlug } = __m_model_plug;
+const { buildBench, FLOOR_Y } = __m_model_bench3d;
+const { createAudio } = __m_audio;
+const { drawTach, drawCycle, drawPV } = __m_ui_instruments;
+
+const $ = (id) => document.getElementById(id);
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const sim = createBench(), st = sim.state;
+
+/* ---------- renderer, kamera, cahaya ---------- */
+const stage = $('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.localClippingEnabled = true;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.8;
+scene.fog = new THREE.Fog(0xd7dfd8, 260, 520);
+const camera = new THREE.PerspectiveCamera(32, 1, 1, 900);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.minDistance = 4; controls.maxDistance = 260;
+controls.maxPolarAngle = Math.PI * 0.62;
+scene.add(new THREE.HemisphereLight(0xf2f6f0, 0x3d4a42, 0.45));
+const sun = new THREE.DirectionalLight(0xfff4e6, 2.7);
+sun.position.set(30, 70, 45); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -60, right: 55, top: 45, bottom: -45, near: 1, far: 220 });
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xe4efff, 0.6); fill.position.set(-30, 14, 50); scene.add(fill);
+const rim = new THREE.DirectionalLight(0xcfe3ff, 1.0); rim.position.set(-40, 26, -40); scene.add(rim);
+
+/* ---------- model ---------- */
+const eng = buildEngine(scene);
+const plug = buildPlug(eng.cyl);
+scene.updateMatrixWorld(true);
+eng.plugBootWorld = plug.group.localToWorld(V3(0, 10.4, 0));
+const bench = buildBench(scene, eng);
+const GAP_WORLD = () => eng.cyl.localToWorld(plug.gapLocal.clone());
+
+/* ---------- asap knalpot ---------- */
+const smoke = [];
+for (let i = 0; i < 80; i++) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0x9a9d98, transparent: true, depthWrite: false, opacity: 0 }));
+  s.visible = false; scene.add(s); smoke.push({ s, life: 0, max: 1, v: V3(0, 0, 0), a: 0 });
+}
+let smokeIdx = 0;
+const tailDir = V3(-1, 0.12, 0).normalize();
+function puff(amount, color) {
+  const p = smoke[smokeIdx++ % smoke.length];
+  p.s.visible = true; p.life = 0; p.max = 1.0 + Math.random() * 0.9;
+  p.s.position.copy(eng.parts.tail);
+  p.v.copy(tailDir).multiplyScalar(9 + Math.random() * 6 + st.rpm * 0.002).add(V3(0, 0.6 + Math.random() * 1.5, (Math.random() - 0.5) * 2));
+  p.a = amount; p.s.material.color.setHex(color);
+}
+function updateSmoke(dt) {
+  for (const p of smoke) {
+    if (!p.s.visible) continue;
+    p.life += dt; const t = p.life / p.max;
+    if (t >= 1) { p.s.visible = false; continue; }
+    p.s.position.addScaledVector(p.v, dt); p.v.multiplyScalar(1 - dt * 1.6); p.v.y += dt * 2.6;
+    const size = 1.2 + t * 7; p.s.scale.set(size, size, 1);
+    p.s.material.opacity = p.a * (1 - t) * (1 - t);
+  }
+}
+const afterfireLight = new THREE.PointLight(0xff8a3a, 0, 30, 1.5); scene.add(afterfireLight);
+let afterGlow = 0;
+
+/* ---------- mode tampilan ---------- */
+let mode = 'potong';
+function setMode(m) {
+  mode = m;
+  for (const mat of sectioned) {
+    mat.clippingPlanes = m === 'potong' ? [cutPlane] : [];
+    mat.transparent = m === 'tembus';
+    mat.opacity = m === 'tembus' ? 0.13 : 1;
+    mat.depthWrite = m !== 'tembus';
+    mat.needsUpdate = true;
+  }
+  for (const mat of [eng.gasMat, eng.parts.oilMat, ...plug.clipMats]) { mat.clippingPlanes = m === 'potong' ? [cutPlane] : []; mat.needsUpdate = true; }
+  eng.gas.visible = m !== 'utuh';
+  eng.parts.oil.visible = m !== 'utuh';
+  eng.clutch.visible = m !== 'potong';
+  plug.setVisible(m !== 'utuh');
+  document.querySelectorAll('[data-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.view === m)));
+}
+
+/* ---------- kamera ---------- */
+const VIEW_DIR = V3(0.34, 0.2, 0.92).normalize();
+const HOME_TARGET = V3(2, 3.5, 0);
+function homeView() {
+  const aspect = stage.clientWidth / Math.max(1, stage.clientHeight);
+  const dist = aspect < 0.8 ? 112 : aspect < 1.2 ? 82 : 66;
+  return { t: HOME_TARGET.clone(), p: HOME_TARGET.clone().addScaledVector(VIEW_DIR, dist) };
+}
+let fly = null;
+function flyTo(where) {
+  let v;
+  if (where === 'plug') {
+    const g = GAP_WORLD(), t = g.clone().lerp(eng.cyl.localToWorld(V3(0, 13.6, 0)), 0.45);
+    const d = V3(0.35, 0.15, 1).normalize().applyAxisAngle(V3(0, 0, 1), -eng.tilt);
+    v = { t, p: t.clone().addScaledVector(d, stage.clientWidth < 500 ? 20 : 14) };
+  }
+  else if (where === 'gearbox') { const t = V3(-8.2, -1.0, 0); v = { t, p: t.clone().addScaledVector(V3(-0.25, 0.3, 1).normalize(), stage.clientWidth < 500 ? 44 : 32) }; }
+  else v = homeView();
+  if (reduceMotion) { controls.target.copy(v.t); camera.position.copy(v.p); controls.update(); return; }
+  fly = { k: 0, t0: controls.target.clone(), p0: camera.position.clone(), t1: v.t, p1: v.p };
+}
+function updateFly(dt) {
+  if (!fly) return;
+  fly.k = Math.min(1, fly.k + dt / 1.1);
+  const e = fly.k < 0.5 ? 4 * fly.k ** 3 : 1 - Math.pow(-2 * fly.k + 2, 3) / 2;
+  controls.target.lerpVectors(fly.t0, fly.t1, e); camera.position.lerpVectors(fly.p0, fly.p1, e);
+  if (fly.k >= 1) fly = null;
+}
+renderer.domElement.addEventListener('pointerdown', () => { fly = null; });
+
+/* ---------- tema ---------- */
+const T = {};
+function readTokens() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ['ink', 'muted', 'line', 'accent', 'hot', 'panel', 'stage', 'intake', 'exhaust']) T[k] = cs.getPropertyValue('--' + k).trim();
+  if (T.stage) { const c = new THREE.Color(T.stage); scene.background = c; scene.fog.color.copy(c); }
+}
+readTokens();
+{ const mq = matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', readTokens); else if (mq.addListener) mq.addListener(readTokens); }
+new MutationObserver(readTokens).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+/* ---------- suara ---------- */
+const audio = createAudio();
+function setSound(on) {
+  const ok = audio.set(on);
+  $('sound').setAttribute('aria-pressed', String(ok));
+  $('sound').textContent = ok ? 'Suara: nyala' : 'Nyalakan suara';
+}
+
+/* ---------- panel ---------- */
+const ui = {};
+for (const id of ['v-rpm', 'v-speed', 'v-hp', 'v-tq', 'v-head', 'v-afr', 'v-map', 'v-fuel', 'v-clutch', 'v-peak', 'v-adv', 'state', 'stroke-tag', 'run', 'note', 'choke']) ui[id] = $(id);
+const nf = (min, max) => new Intl.NumberFormat('id-ID', { minimumFractionDigits: min, maximumFractionDigits: max });
+const nf0 = nf(0, 0), nf1 = nf(1, 1), nf2 = nf(2, 2);
+const smooth = { rpm: 0, hp: 0, tq: 0, fuel: 0, afr: 14.7, map: 101, speed: 0 };
+let starterTime = 0, stallNote = '', slow = false;
+const STROKE_TEXT = {
+  hisap: 'Hisap: klep masuk terbuka, seher turun menarik campuran bensin dan udara dari karbu.',
+  kompresi: 'Kompresi: kedua klep tertutup, seher naik memampatkan campuran. Busi memercik sebelum TMA.',
+  usaha: 'Usaha: api merambat dari busi, tekanan mendorong seher turun dan memutar kruk as.',
+  buang: 'Buang: klep buang terbuka, seher naik mendorong gas sisa ke knalpot.',
+};
+function phase() {
+  if (st.starter) return 'starter';
+  if (st.running) return st.limiter ? 'limiter' : 'hidup';
+  if (st.rpm > 5) return 'berhenti';
+  return 'mati';
+}
+function noteText(ph, readable, sname) {
+  if (stallNote && !st.fuel) return stallNote;
+  if (readable && st.rpm > 1) return STROKE_TEXT[sname];
+  if (ph === 'starter') return 'Motor starter memutar kruk as lewat kopling satu arah sampai campuran pertama terbakar.';
+  if (ph === 'mati' || ph === 'berhenti') return 'Mesin mati. Tekan Hidupkan mesin. Saat dingin, nyalakan choke dulu.';
+  if (st.headC > 250) return 'Kepala silinder terlalu panas. Kurangi gas atau beban dan biarkan kipas mendinginkan mesin.';
+  if (ph === 'limiter') return 'CDI memotong pengapian di 9.600 rpm. Kurangi gas, tambah beban, atau naikkan gigi.';
+  if (st.choke && st.headC > 62) return `Mesin sudah hangat (${nf0.format(st.headC)} °C). Matikan choke: campuran terlalu kaya, putaran turun dan asap menghitam.`;
+  if (st.choke) return 'Choke aktif: campuran diperkaya karena bensin mengembun di dinding mesin yang dingin. Tunggu sampai ±60 °C.';
+  if (st.warm < 0.55) return 'Mesin masih dingin tanpa choke: campuran terlalu kurus, putaran tersendat. Nyalakan choke sebentar.';
+  if (st.gear === 0 && st.load > 0.02) return 'Gigi netral: dinamo tidak tersambung ke mesin. Masukkan gigi 1–4 untuk membebani.';
+  if (st.gear > 0 && st.clutchState === 'selip' && st.throttle > 0.1) return 'Kopling sentrifugal selip: putaran belum cukup tinggi untuk beban ini, sepatu kopling belum menggigit penuh.';
+  if (st.gear > 0 && st.clutchState === 'lepas') return 'Di bawah ±1.800 rpm sepatu kopling sentrifugal belum mengembang, jadi mesin stasioner tanpa menarik roda. Tambah gas.';
+  if (st.gear > 0) return `Gigi ${st.gear}: rasio total ${nf2.format(GEARBOX.primary * GEARBOX.ratios[st.gear] * GEARBOX.final)} dari kruk as ke roda. Dinamo membaca tenaga setelah rugi transmisi.`;
+  return 'Mesin hangat dan stasioner. Masukkan gigi lalu tarik beban dinamo untuk mengukur tenaga. Tekan Lambat untuk melihat tiap langkah.';
+}
+let uiTick = 0, lastTag = '';
+function updateUI(dt) {
+  const k = 1 - Math.exp(-dt * 8);
+  const hp = st.dynoPower / 745.7;
+  smooth.rpm += (st.rpm - smooth.rpm) * k; smooth.hp += (hp - smooth.hp) * k; smooth.tq += (st.dynoTq - smooth.tq) * k;
+  smooth.fuel += (st.fuelLph - smooth.fuel) * k; smooth.afr += (14.7 * st.lambdaEff - smooth.afr) * k * 0.5; smooth.map += (st.pMan / 1000 - smooth.map) * k;
+  smooth.speed += (st.speedKmh - smooth.speed) * k;
+  const sname = STROKES[strokeIndex(st.phi)], readable = slow || st.rpm < 250;
+  const tag = readable ? sname : '4 langkah';
+  if (tag !== lastTag) { lastTag = tag; ui['stroke-tag'].textContent = tag; ui['stroke-tag'].dataset.stroke = readable ? sname : 'siklus'; }
+  uiTick += dt;
+  if (uiTick > 0.1) {
+    uiTick = 0;
+    const turning = st.rpm > 60, ph = phase();
+    ui['v-rpm'].textContent = nf0.format(Math.round(smooth.rpm / 10) * 10);
+    ui['v-speed'].textContent = nf0.format(Math.max(0, smooth.speed));
+    ui['v-hp'].textContent = nf2.format(Math.max(0, smooth.hp));
+    ui['v-tq'].textContent = nf1.format(Math.max(0, smooth.tq));
+    ui['v-head'].textContent = nf0.format(st.headC);
+    ui['v-head'].parentElement.parentElement.dataset.warn = st.headC > 250 ? 'hot' : st.headC < 55 ? 'cold' : '';
+    ui['v-afr'].textContent = turning && st.fuel ? nf1.format(smooth.afr) : '–';
+    ui['v-map'].textContent = nf0.format(turning ? smooth.map : 101);
+    ui['v-fuel'].textContent = nf2.format(turning && st.fuel ? Math.max(0, smooth.fuel) : 0);
+    ui['v-clutch'].textContent = st.gear === 0 && st.shiftT <= 0 ? 'netral' : st.shiftT > 0 ? 'pindah gigi' : st.clutchState;
+    ui['v-peak'].textContent = nf0.format(turning ? st.lastPeak / 1e5 : 0);
+    ui['v-adv'].textContent = nf0.format(st.advance);
+    ui.state.textContent = { starter: 'Starter berputar', hidup: 'Hidup', limiter: 'Pembatas putaran', berhenti: 'Berhenti', mati: 'Mati' }[ph];
+    ui.state.dataset.state = ph;
+    ui.run.textContent = ph === 'hidup' || ph === 'limiter' ? 'Matikan mesin' : ph === 'starter' ? 'Menyalakan…' : 'Hidupkan mesin';
+    ui.run.dataset.on = String(st.fuel);
+    const n = noteText(ph, readable, sname);
+    if (ui.note.textContent !== n) ui.note.textContent = n;
+    const tg = sim.shiftingTo();
+    document.querySelectorAll('[data-gear]').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.gear === tg)));
+    ui.choke.setAttribute('aria-pressed', String(st.choke));
+    ui.choke.textContent = st.choke ? 'Choke: aktif' : 'Choke: mati';
+  }
+  drawTach($('tach'), T, smooth.rpm, st);
+  drawCycle($('cycle'), T, st);
+  drawPV($('pv'), T, st);
+}
+
+function toggleEngine() {
+  if (st.running || st.starter) { sim.stop(); stallNote = ''; return false; }
+  sim.stop(); sim.key(); starterTime = 0; stallNote = '';
+  return true;
+}
+ui.run.addEventListener('click', () => { const s = toggleEngine(); if (s && !audio.ready && audio.wanted !== false) setSound(true); });
+$('gas').addEventListener('input', (e) => { sim.setThrottle(e.target.value / 100); $('gas-out').textContent = e.target.value + '%'; });
+$('load').addEventListener('input', (e) => { sim.setLoad(e.target.value / 100); $('load-out').textContent = e.target.value + '%'; });
+$('sound').addEventListener('click', () => { audio.wanted = !audio.on; setSound(!audio.on); });
+ui.choke.addEventListener('click', () => sim.setChoke(!st.choke));
+document.querySelectorAll('[data-gear]').forEach((b) => b.addEventListener('click', () => sim.setGear(+b.dataset.gear)));
+function setSlow(v) { slow = v; $('slow').setAttribute('aria-pressed', String(v)); }
+$('slow').addEventListener('click', () => setSlow(!slow));
+$('reset').addEventListener('click', () => flyTo(null));
+$('plug-view').addEventListener('click', () => { setMode('potong'); setSlow(true); flyTo('plug'); });
+$('gear-view').addEventListener('click', () => { setMode('potong'); flyTo('gearbox'); });
+document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.view)));
+function nudge(id, d) { const el = $(id); el.value = clamp(+el.value + d, 0, 100); el.dispatchEvent(new Event('input')); }
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'BUTTON' && (e.key === ' ' || e.key === 'Enter')) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (e.key === ' ') { e.preventDefault(); toggleEngine(); }
+  else if (e.key === 'ArrowUp' && e.target.tagName !== 'INPUT') { e.preventDefault(); nudge('gas', 10); }
+  else if (e.key === 'ArrowDown' && e.target.tagName !== 'INPUT') { e.preventDefault(); nudge('gas', -10); }
+  else if (k === '1') setMode('utuh'); else if (k === '2') setMode('potong'); else if (k === '3') setMode('tembus');
+  else if (k === 's') setSlow(!slow);
+  else if (k === 'b') { setMode('potong'); setSlow(true); flyTo('plug'); }
+  else if (k === 't') { setMode('potong'); flyTo('gearbox'); }
+  else if (k === 'c') sim.setChoke(!st.choke);
+  else if (k === 'e') sim.shift(1);
+  else if (k === 'q') sim.shift(-1);
+});
+
+/* ---------- loop ---------- */
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage);
+resize();
+{ const v = homeView(); controls.target.copy(v.t); camera.position.copy(v.p); controls.update(); }
+setMode('potong'); setSound(false);
+setTimeout(() => { if (!st.fuel) { sim.key(); starterTime = 0; } }, 700);
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const scale = slow ? 1 / 20 : 1, sdt = dt * scale, t0 = st.time;
+  if (st.starter) {
+    starterTime += sdt;
+    if (st.running || starterTime > 3.5) {
+      sim.release();
+      if (!st.running) { sim.stop(); stallNote = !st.choke && st.warm < 0.5 ? 'Mesin gagal hidup: masih dingin dan choke mati. Nyalakan choke lalu coba lagi.' : 'Mesin gagal hidup. Coba lagi.'; }
+    }
+  } else if (st.fuel && !st.running && st.rpm < 60) {
+    sim.stop();
+    stallNote = st.choke && st.warm > 0.8 ? 'Mesin mati: choke masih aktif saat mesin panas, campuran terlalu kaya. Matikan choke lalu hidupkan lagi.'
+      : !st.choke && st.warm < 0.5 ? 'Mesin mati: masih dingin dan campuran terlalu kurus. Nyalakan choke lalu hidupkan lagi.' : 'Mesin mati.';
+  }
+  sim.step(sdt);
+  const at = audio.now();
+  for (const ev of st.events) {
+    const delay = (ev.t - t0) / scale;
+    audio.event(ev, at ? at + delay : 0, st);
+    if (ev.type === 'exhaust') {
+      const cold = st.headC < 50, rich = ev.rich;
+      if (!reduceMotion && Math.random() < (slow ? 1 : clamp(600 / Math.max(st.rpm, 1), 0.1, 1)))
+        puff(ev.lit ? (rich ? 0.45 : cold ? 0.32 : 0.12 + 0.18 * st.throttle) : 0.05, rich ? 0x3b3c39 : cold ? 0xe8ece8 : 0xb7bab4);
+    } else if (ev.type === 'spark') { if (ev.lit) plug.spark(); }
+    else if (ev.type === 'caught') { for (let i = 0; i < 6; i++) puff(0.5, 0x4a4b48); }
+    else if (ev.type === 'afterfire') { afterGlow = 1; for (let i = 0; i < 3; i++) puff(0.4, 0x5a5047); }
+  }
+  sim.clearEvents();
+  afterGlow = Math.max(0, afterGlow - dt * 14);
+  afterfireLight.intensity = afterGlow * 400; afterfireLight.position.copy(eng.parts.tail);
+  audio.update(st, scale);
+  eng.update(st, sdt);
+  plug.update(st, dt, slow);
+  bench.update(st, sdt);
+  updateSmoke(dt * (slow ? 0.25 : 1));
+  updateUI(dt);
+  updateFly(dt);
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+window.__mesin = { sim, setMode, flyTo, setSlow, camera, controls, scene, renderer, eng };
+
+return {  };
+})();
+</script>

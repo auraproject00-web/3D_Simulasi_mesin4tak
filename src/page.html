@@ -1,6 +1,6 @@
 <title>Meja Uji Mesin Bebek</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="Mesin motor satu silinder 4-tak 109 cc yang berjalan di browser: dibangun prosedural dengan three.js, dengan simulasi tekanan silinder, dinamo rem, dan suara yang disintesis.">
+<meta name="description" content="Mesin bebek 109,1 cc 4-tak yang berjalan di browser: model three.js prosedural, simulasi tekanan silinder, karbu, choke, kopling sentrifugal, transmisi 4 percepatan, dinamo, dan suara sintesis.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Barlow:wght@400;500;600&family=Martian+Mono:wght@400;500&display=swap">
@@ -122,22 +122,32 @@ td:last-child { text-align: right; font-family: var(--mono); font-size: 12px; fo
   .hint { display: none; }
   .seg button, .chip { padding: 7px 9px; font-size: 12.5px; }
 }
-</style>
 
+.readout[data-warn="hot"] dd b { color: var(--hot); }
+.readout[data-warn="cold"] dd b { color: var(--intake); }
+.gearbox { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; }
+.gearbox .seg { justify-self: start; }
+.seg.gears button { min-width: 38px; font-family: var(--display); font-weight: 800; font-size: 17px; padding: 5px 9px 4px; }
+.seg.gears button[data-gear="0"][aria-pressed="true"] { background: #2fa35a; color: #fff; }
+.ctl-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.readouts.small dd { font-size: 16px; }
+.readout dd b { font-weight: 500; }
+</style>
+<!--BODY-->
 <div class="wrap">
   <header class="top">
     <div>
-      <p class="eyebrow">Meja uji · 4-tak · pendingin udara · SOHC 2 klep</p>
-      <h1>Mesin Bebek <em>109</em> cc</h1>
+      <p class="eyebrow">Meja uji · 4-tak · pendingin udara · SOHC 2 klep · 4 percepatan rotari</p>
+      <h1>Mesin Bebek <em>109,1</em> cc</h1>
     </div>
-    <p class="lede">Satu silinder yang benar-benar berputar. Seher, stang seher, kruk as, kem, pelatuk, klep, dan rantai keteng digerakkan oleh simulasi tekanan di dalam silinder, lalu diukur dinamo rem.</p>
+    <p class="lede">Silinder rebah ke depan, karbu di atas, transmisi di belakang kruk as, seperti mesin bebek sungguhan. Tekanan di dalam silinder dihitung tiap derajat engkol, lalu tenaganya diukur dinamo lewat kopling sentrifugal dan gigi.</p>
   </header>
 
   <main class="bench">
     <section class="viewport" aria-label="Model 3D mesin">
       <div id="stage"></div>
       <div class="hud">
-        <div class="stroke-tag" id="stroke-tag" data-stroke="usaha">usaha</div>
+        <div class="stroke-tag" id="stroke-tag" data-stroke="siklus">4 langkah</div>
         <div class="state" id="state" data-state="mati">Mati</div>
       </div>
       <div class="toolbar">
@@ -150,6 +160,7 @@ td:last-child { text-align: right; font-family: var(--mono); font-size: 12px; fo
         <div class="row">
           <button type="button" class="chip" id="slow" aria-pressed="false">Lambat 1/20</button>
           <button type="button" class="chip" id="plug-view">Lihat busi</button>
+          <button type="button" class="chip" id="gear-view">Lihat transmisi</button>
           <button type="button" class="chip" id="reset">Atur ulang</button>
         </div>
       </div>
@@ -157,71 +168,84 @@ td:last-child { text-align: right; font-family: var(--mono); font-size: 12px; fo
 
     <aside class="panel" aria-label="Panel operator">
       <button type="button" class="run" id="run" data-on="false">Hidupkan mesin</button>
+      <div class="ctl-row">
+        <button type="button" class="chip" id="choke" aria-pressed="true">Choke: aktif</button>
+        <button type="button" class="chip" id="sound" aria-pressed="false">Nyalakan suara</button>
+      </div>
       <div class="ctl">
         <div class="ctl-head"><label for="gas">Gas</label><output id="gas-out" for="gas">0%</output></div>
         <input type="range" id="gas" min="0" max="100" value="0" step="1">
-        <small>Membuka skep karburator. Lihat skep kuningan naik di potongan.</small>
+        <small>Mengangkat skep karbu. Tekanan intake ikut naik dari vakum ke tekanan udara luar.</small>
+      </div>
+      <div class="gearbox">
+        <span class="ctl"><label>Gigi</label></span>
+        <div class="seg gears" role="group" aria-label="Gigi">
+          <button type="button" id="gear-0" data-gear="0" aria-pressed="true">N</button>
+          <button type="button" id="gear-1" data-gear="1" aria-pressed="false">1</button>
+          <button type="button" id="gear-2" data-gear="2" aria-pressed="false">2</button>
+          <button type="button" id="gear-3" data-gear="3" aria-pressed="false">3</button>
+          <button type="button" id="gear-4" data-gear="4" aria-pressed="false">4</button>
+        </div>
       </div>
       <div class="ctl">
         <div class="ctl-head"><label for="load">Beban dinamo</label><output id="load-out" for="load">0%</output></div>
         <input type="range" id="load" min="0" max="100" value="0" step="1">
-        <small>Rem cakram di poros keluaran. Tahan putaran untuk membaca tenaga.</small>
-      </div>
-      <div class="row">
-        <button type="button" class="chip" id="sound" aria-pressed="false">Nyalakan suara</button>
+        <small>Rem arus eddy di belakang, digerakkan rantai dari gir depan 14 ke gir 37.</small>
       </div>
       <dl class="readouts" style="margin:0">
-        <div class="readout big"><dt>Putaran mesin</dt><dd><b id="v-rpm" style="font-weight:500">0</b><span>rpm</span></dd></div>
-        <div class="readout"><dt>Tenaga di dinamo</dt><dd><b id="v-hp" style="font-weight:500">0,0</b><span>hp</span></dd></div>
-        <div class="readout"><dt>Torsi di dinamo</dt><dd><b id="v-tq" style="font-weight:500">0,0</b><span>N·m</span></dd></div>
-        <div class="readout"><dt>Tekanan puncak</dt><dd><b id="v-peak" style="font-weight:500">0</b><span>bar</span></dd></div>
-        <div class="readout"><dt>Pengapian</dt><dd><b id="v-adv" style="font-weight:500">10</b><span>° sblm TMA</span></dd></div>
-        <div class="readout"><dt>Konsumsi bensin</dt><dd><b id="v-fuel" style="font-weight:500">0,00</b><span>l/jam</span></dd></div>
-        <div class="readout"><dt>Suhu cakram rem</dt><dd><b id="v-disc" style="font-weight:500">25</b><span>°C</span></dd></div>
+        <div class="readout big"><dt>Putaran mesin</dt><dd><b id="v-rpm">0</b><span>rpm</span></dd></div>
+        <div class="readout"><dt>Kecepatan setara</dt><dd><b id="v-speed">0</b><span>km/jam</span></dd></div>
+        <div class="readout"><dt>Kopling</dt><dd><b id="v-clutch">netral</b></dd></div>
+        <div class="readout"><dt>Tenaga di dinamo</dt><dd><b id="v-hp">0,00</b><span>hp</span></dd></div>
+        <div class="readout"><dt>Torsi di dinamo</dt><dd><b id="v-tq">0,0</b><span>N·m</span></dd></div>
+        <div class="readout"><dt>Suhu kepala silinder</dt><dd><b id="v-head">30</b><span>°C</span></dd></div>
+        <div class="readout"><dt>Campuran (AFR)</dt><dd><b id="v-afr">–</b><span>: 1</span></dd></div>
+        <div class="readout"><dt>Tekanan intake</dt><dd><b id="v-map">101</b><span>kPa</span></dd></div>
+        <div class="readout"><dt>Konsumsi bensin</dt><dd><b id="v-fuel">0,00</b><span>l/jam</span></dd></div>
+        <div class="readout"><dt>Tekanan puncak</dt><dd><b id="v-peak">0</b><span>bar</span></dd></div>
+        <div class="readout"><dt>Pengapian CDI</dt><dd><b id="v-adv">10</b><span>° sblm TMA</span></dd></div>
       </dl>
       <div class="gauges">
-        <figure><figcaption>Takometer</figcaption><canvas class="g" id="tach" aria-label="Takometer"></canvas></figure>
+        <figure><figcaption>Takometer</figcaption><canvas class="g" id="tach" aria-label="Takometer dan gigi"></canvas></figure>
         <figure><figcaption>Siklus 720°</figcaption><canvas class="g" id="cycle" aria-label="Roda siklus empat langkah"></canvas></figure>
         <figure class="wide"><figcaption>Diagram P–V silinder (tekanan log)</figcaption><canvas class="g pv" id="pv" aria-label="Diagram tekanan terhadap volume"></canvas></figure>
       </div>
       <p class="note" id="note">Mesin sedang di-starter.</p>
-      <p class="keys"><kbd>Spasi</kbd> hidup/mati · <kbd>↑</kbd><kbd>↓</kbd> gas · <kbd>1</kbd>–<kbd>3</kbd> tampilan · <kbd>S</kbd> lambat · <kbd>B</kbd> lihat busi</p>
+      <p class="keys"><kbd>Spasi</kbd> hidup/mati · <kbd>↑</kbd><kbd>↓</kbd> gas · <kbd>Q</kbd><kbd>E</kbd> gigi · <kbd>C</kbd> choke · <kbd>1</kbd>–<kbd>3</kbd> tampilan · <kbd>S</kbd> lambat · <kbd>B</kbd> busi · <kbd>T</kbd> transmisi</p>
     </aside>
   </main>
 
   <section class="sheet">
     <div>
       <h2>Cara kerjanya</h2>
-      <p>Satu siklus butuh dua putaran kruk as (720°). Kem berputar setengah kecepatan kruk as lewat rantai keteng, jadi tiap klep membuka sekali per siklus.</p>
-      <p>Tiap derajat putaran, simulasi menghitung volume silinder dari posisi seher, lalu tekanan gas: hisap dari intake manifold, kompresi politropik, pembakaran dengan kurva Wiebe setelah busi memercik, dan buang. Tekanan dikali luas seher dan lengan engkol menjadi torsi yang memutar roda gila.</p>
+      <p>Satu siklus butuh dua putaran kruk as (720°). Kem berputar setengah kecepatan lewat rantai keteng, jadi tiap klep membuka sekali per siklus.</p>
+      <p>Karbu mengatur aliran udara lewat skep: tekanan intake dihitung dari aliran kompresibel yang sama dengan yang dihisap silinder. Campuran ditentukan jet, jarum, dan choke. Bensin mengembun di dinding mesin yang dingin, jadi tanpa choke campuran terlalu kurus dan mesin tersendat.</p>
+      <p>Di bawah ±1.800 rpm sepatu kopling sentrifugal belum mengembang, jadi motor bisa stasioner dalam gigi. Di atasnya kopling menggigit dan tenaga lewat gigi primer 69/17, gigi transmisi, lalu rantai ke dinamo.</p>
     </div>
     <div>
       <h2>Spesifikasi</h2>
       <table>
         <tr><td>Diameter × langkah</td><td>50 × 55,6 mm</td></tr>
-        <tr><td>Isi silinder</td><td>109 cc</td></tr>
-        <tr><td>Rasio kompresi</td><td>9,3 : 1</td></tr>
-        <tr><td>Klep masuk buka / tutup</td><td>10° sblm TMA / 45° stl TMB</td></tr>
-        <tr><td>Klep buang buka / tutup</td><td>45° sblm TMB / 15° stl TMA</td></tr>
-        <tr><td>Pembatas putaran</td><td>9.500 rpm</td></tr>
+        <tr><td>Isi silinder</td><td>109,1 cc</td></tr>
+        <tr><td>Rasio kompresi</td><td>9,0 : 1</td></tr>
+        <tr><td>Reduksi primer</td><td>4,059 (69/17)</td></tr>
+        <tr><td>Gigi 1 / 2 / 3 / 4</td><td>2,615 / 1,550 / 1,136 / 0,916</td></tr>
+        <tr><td>Reduksi akhir</td><td>2,642 (37/14)</td></tr>
+        <tr><td>Kopling</td><td>sentrifugal otomatis + manual basah</td></tr>
       </table>
+      <p style="margin-top:8px"><span class="tag">Dipublikasikan</span> Angka di atas dan tenaga maksimum 6,22 kW @ 7.500 rpm serta torsi 8,59 N·m @ 5.500 rpm berasal dari spesifikasi mesin bebek 110 cc kelas ini.</p>
     </div>
     <div>
-      <h2>Hasil di meja uji</h2>
+      <h2>Hasil model</h2>
       <table>
-        <tr><td>Putaran stasioner</td><td>± 1.350 rpm</td></tr>
-        <tr><td>Torsi puncak</td><td>9,2 N·m @ 5.500</td></tr>
-        <tr><td>Tenaga puncak</td><td>7,6 hp @ 6.500</td></tr>
-        <tr><td>Tekanan puncak, gas penuh</td><td>± 64 bar</td></tr>
+        <tr><td>Putaran stasioner, hangat</td><td>± 1.400 rpm</td></tr>
+        <tr><td>Torsi kruk as, gas penuh</td><td>8,7 N·m @ 5.500–6.000</td></tr>
+        <tr><td>Tenaga kruk as</td><td>6,2 kW (8,3 hp) @ 7.500</td></tr>
+        <tr><td>Kopling mulai menggigit</td><td>± 1.800 rpm</td></tr>
+        <tr><td>Pembatas putaran CDI</td><td>9.600 rpm</td></tr>
       </table>
-      <p style="margin-top:8px"><span class="tag">Dimodelkan</span> Semua angka di sini keluar dari model ini, bukan data pabrikan mana pun. Tanpa file 3D, gambar, atau rekaman suara: semuanya dibuat dari kode.</p>
+      <p style="margin-top:8px"><span class="tag">Dimodelkan</span> Bukaan klep, kurva pengapian, efisiensi volumetrik, gesekan, kopling, dan suhu dimodelkan lalu dikalibrasi ke angka publikasi. Dinamo membaca ±8% lebih rendah karena rugi transmisi. Pemanasan mesin dipercepat 6×. Tanpa file 3D, gambar, atau rekaman suara: semuanya dibuat dari kode.</p>
     </div>
   </section>
 </div>
-
-<script type="importmap">
-{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/" } }
-</script>
-<script type="module">
-/*APP*/
-</script>
+<!--SCRIPTS-->
